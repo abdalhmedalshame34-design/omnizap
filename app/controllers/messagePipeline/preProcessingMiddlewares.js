@@ -1,4 +1,4 @@
-export const createPreProcessingMiddlewares = ({ executeQuery, TABLES, isStatusJid, stopMessagePipeline, handleAntiLink, ensureCommandPrefixForContext, resolveCaptchaByMessage, maybeHandleStartLoginMessage, mergeAnalysisMetadata, ensureGroupConfigForContext, resolveStickerFocusState, resolveStickerFocusMessageClassification, resolveGroupOwnerForContext, ownerEnforcementMode = 'off', primarySessionId = 'default', resolveSenderAdminForContext, isUserAdmin, canSendMessageInStickerFocus, registerMessageUsageInStickerFocus, shouldSendStickerFocusWarning, sendReply, formatStickerFocusRuleLabel, formatRemainingMinutesLabel, logger }) => {
+export const createPreProcessingMiddlewares = ({ executeQuery, TABLES, isStatusJid, stopMessagePipeline, handleAntiLink, ensureCommandPrefixForContext, resolveCaptchaByMessage, maybeHandleStartLoginMessage, mergeAnalysisMetadata, ensureGroupConfigForContext, resolveStickerFocusState, resolveStickerFocusMessageClassification, resolveGroupOwnerForContext, ownerEnforcementMode = 'off', primarySessionId = 'default', allowSelfCommandsOnAppend = true, resolveSenderAdminForContext, isUserAdmin, canSendMessageInStickerFocus, registerMessageUsageInStickerFocus, shouldSendStickerFocusWarning, sendReply, formatStickerFocusRuleLabel, formatRemainingMinutesLabel, logger }) => {
   const normalizedOwnerEnforcementMode = String(ownerEnforcementMode || 'off')
     .trim()
     .toLowerCase();
@@ -156,12 +156,26 @@ export const createPreProcessingMiddlewares = ({ executeQuery, TABLES, isStatusJ
 
   const detectCommandIntentMiddleware = async (ctx) => {
     ctx.hasCommandPrefix = ctx.extractedText.startsWith(ctx.commandPrefix);
-    ctx.isCommandMessage = ctx.hasCommandPrefix && ctx.isNotifyUpsert;
+    const isSelfAppendCommand =
+      allowSelfCommandsOnAppend &&
+      ctx.hasCommandPrefix &&
+      !ctx.isNotifyUpsert &&
+      String(ctx.upsertType || '')
+        .trim()
+        .toLowerCase() === 'append' &&
+      ctx.isMessageFromBot;
+    ctx.isCommandMessage = ctx.hasCommandPrefix && (ctx.isNotifyUpsert || isSelfAppendCommand);
 
     ctx.analysisPayload.isCommand = ctx.isCommandMessage;
     ctx.analysisPayload.commandPrefix = ctx.commandPrefix;
 
-    if (ctx.hasCommandPrefix && !ctx.isNotifyUpsert) {
+    if (isSelfAppendCommand) {
+      mergeAnalysisMetadata(ctx.analysisPayload, {
+        command_detected_via: 'append_from_me',
+      });
+    }
+
+    if (ctx.hasCommandPrefix && !ctx.isCommandMessage) {
       mergeAnalysisMetadata(ctx.analysisPayload, {
         command_suppressed_reason: 'non_notify_upsert',
       });

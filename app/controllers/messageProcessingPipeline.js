@@ -44,6 +44,7 @@ const MESSAGE_REPLY_PRESENCE_DELAY_MS = parseEnvInt(process.env.MESSAGE_REPLY_PR
 const MESSAGE_REPLY_PRESENCE_SUBSCRIBE = parseEnvBool(process.env.MESSAGE_REPLY_PRESENCE_SUBSCRIBE, true);
 const CONVERSATIONAL_AUTO_REPLY_ENABLED = parseEnvBool(process.env.CONVERSATIONAL_AUTO_REPLY_ENABLED, false);
 const WHATSAPP_COMMAND_REQUIRES_GOOGLE_LOGIN = parseEnvBool(process.env.WHATSAPP_COMMAND_REQUIRES_GOOGLE_LOGIN, true);
+const WHATSAPP_ALLOW_SELF_COMMANDS_ON_APPEND = parseEnvBool(process.env.WHATSAPP_ALLOW_SELF_COMMANDS_ON_APPEND, true);
 const SITE_ORIGIN =
   String(process.env.SITE_ORIGIN || process.env.WHATSAPP_LOGIN_BASE_URL || 'https://omnizap.shop')
     .trim()
@@ -638,6 +639,7 @@ const { touchSenderLastSeenMiddleware, ignoreUnprocessableMessageMiddleware, enf
   resolveGroupOwnerForContext,
   ownerEnforcementMode: GROUP_OWNER_ENFORCEMENT_MODE,
   primarySessionId: PRIMARY_SESSION_ID,
+  allowSelfCommandsOnAppend: WHATSAPP_ALLOW_SELF_COMMANDS_ON_APPEND,
   resolveSenderAdminForContext,
   isUserAdmin,
   canSendMessageInStickerFocus,
