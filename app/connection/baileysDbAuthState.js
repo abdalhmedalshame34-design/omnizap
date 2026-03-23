@@ -73,6 +73,41 @@ const parseJsonPayload = (rawPayload) => {
   }
 };
 
+const readSessionAuthStateStats = async (sessionId) => {
+  const rows = await executeQuery(
+    `
+      SELECT category, COUNT(*) AS total
+        FROM \`${AUTH_TABLE}\`
+       WHERE session_id = ?
+       GROUP BY category
+    `,
+    [sessionId],
+  );
+
+  const stats = {
+    totalRows: 0,
+    credsRows: 0,
+    signalKeyRows: 0,
+    categories: {},
+  };
+
+  for (const row of rows || []) {
+    const category = String(row?.category || '').trim();
+    const total = Number(row?.total || 0);
+    if (!category || total <= 0) continue;
+
+    stats.totalRows += total;
+    stats.categories[category] = total;
+    if (category === CREDS_CATEGORY) {
+      stats.credsRows += total;
+    } else {
+      stats.signalKeyRows += total;
+    }
+  }
+
+  return stats;
+};
+
 const ensureAuthStateTable = async () => {
   if (ensureTablePromise) {
     return ensureTablePromise;
@@ -105,11 +140,6 @@ const ensureAuthStateTable = async () => {
   });
 
   return ensureTablePromise;
-};
-
-const hasSessionData = async (sessionId) => {
-  const rows = await executeQuery(`SELECT 1 FROM \`${AUTH_TABLE}\` WHERE session_id = ? LIMIT 1`, [sessionId]);
-  return Array.isArray(rows) && rows.length > 0;
 };
 
 const upsertAuthRow = async (sessionId, category, itemId, value, connection = null) => {
@@ -167,8 +197,22 @@ const parseAuthFileMetadata = (fileName) => {
 const migrateSessionFromFiles = async (sessionId, bootstrapFromDir) => {
   if (!bootstrapFromDir) return false;
 
-  const existsInDb = await hasSessionData(sessionId);
-  if (existsInDb) return false;
+  const authStatsBeforeMigration = await readSessionAuthStateStats(sessionId);
+  const hasSessionData = authStatsBeforeMigration.totalRows > 0;
+  const hasSignalKeyRows = authStatsBeforeMigration.signalKeyRows > 0;
+  if (hasSessionData && hasSignalKeyRows) return false;
+
+  if (hasSessionData && !hasSignalKeyRows) {
+    logger.warn('Auth state do Baileys está parcial (somente creds) e tentará bootstrap via arquivos.', {
+      action: 'baileys_auth_db_partial_state_detected',
+      sessionId,
+      credsRows: authStatsBeforeMigration.credsRows,
+      signalKeyRows: authStatsBeforeMigration.signalKeyRows,
+      totalRows: authStatsBeforeMigration.totalRows,
+      bootstrapFromDir,
+      table: AUTH_TABLE,
+    });
+  }
 
   let directoryEntries = [];
   try {
@@ -232,6 +276,7 @@ const migrateSessionFromFiles = async (sessionId, bootstrapFromDir) => {
       sessionId,
       importedRows,
       skippedRows,
+      hadPartialState: hasSessionData && !hasSignalKeyRows,
       bootstrapFromDir,
       table: AUTH_TABLE,
     });
@@ -336,6 +381,19 @@ export async function useDbAuthState(options = {}) {
         errorMessage: error?.message,
       });
     }
+  }
+
+  const authStats = await readSessionAuthStateStats(sessionId);
+  if (authStats.totalRows > 0 && authStats.signalKeyRows === 0) {
+    logger.warn('Auth state do Baileys sem signal keys; sessão pode ficar instável até novo pareamento.', {
+      action: 'baileys_auth_db_missing_signal_keys',
+      sessionId,
+      credsRows: authStats.credsRows,
+      signalKeyRows: authStats.signalKeyRows,
+      totalRows: authStats.totalRows,
+      categories: authStats.categories,
+      table: AUTH_TABLE,
+    });
   }
 
   const creds = (await readCredsFromDb(sessionId)) || initAuthCreds();
