@@ -39,7 +39,9 @@ const HELMET_CSP_DIRECTIVES = {
   baseUri: ["'self'"],
   objectSrc: ["'none'"],
   frameAncestors: ["'self'"],
-  formAction: ["'self'"],
+  // Google Identity Services usa submit interno para accounts.google.com/gsi/transform.
+  // Sem essa origem no form-action o login pode travar na etapa de transform.
+  formAction: ["'self'", 'https://accounts.google.com'],
   scriptSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com', 'https://cdn.tailwindcss.com'],
   styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
   imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
@@ -71,6 +73,11 @@ const helmetMiddleware = helmet({
     directives: HELMET_CSP_DIRECTIVES,
     reportOnly: !HELMET_CSP_ENFORCE,
   },
+  // Fluxos OAuth/FedCM em popup (Google GIS) podem quebrar com COOP strict.
+  // Permitimos opener em popups mantendo isolamento para navegação principal.
+  crossOriginOpenerPolicy: {
+    policy: 'same-origin-allow-popups',
+  },
   crossOriginEmbedderPolicy: false,
   // Mantemos permissões explícitas para browser APIs sensíveis.
   permissionsPolicy: {
@@ -78,6 +85,7 @@ const helmetMiddleware = helmet({
       geolocation: [],
       microphone: [],
       camera: [],
+      'identity-credentials-get': ['self'],
     },
   },
 });
@@ -86,7 +94,12 @@ const applyFallbackHeaders = (res) => {
   if (!res.getHeader('X-Content-Type-Options')) res.setHeader('X-Content-Type-Options', 'nosniff');
   if (!res.getHeader('X-Frame-Options')) res.setHeader('X-Frame-Options', 'DENY');
   if (!res.getHeader('Referrer-Policy')) res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  if (!res.getHeader('Permissions-Policy')) res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  if (!res.getHeader('Permissions-Policy')) {
+    res.setHeader(
+      'Permissions-Policy',
+      'geolocation=(), microphone=(), camera=(), identity-credentials-get=(self)',
+    );
+  }
   if (FALLBACK_CSP_HEADER && !res.getHeader('Content-Security-Policy') && !res.getHeader('Content-Security-Policy-Report-Only')) {
     const cspHeaderName = HELMET_CSP_ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only';
     res.setHeader(cspHeaderName, FALLBACK_CSP_HEADER);
