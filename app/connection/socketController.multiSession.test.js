@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 
 import { createGroupOwnerWriteStateResolver } from './groupOwnerWriteStateResolver.js';
 
+/**
+ * Cria um cache em memória simples para testes.
+ * @returns {{get: (key: string) => any, set: (key: string, value: any) => boolean, del: (key: string) => boolean, keys: () => string[]}}
+ */
 const createCache = () => {
   const map = new Map();
   return {
@@ -16,9 +20,25 @@ const createCache = () => {
   };
 };
 
+/**
+ * Monta a chave de cache por sessão e grupo.
+ * @param {string} groupJid
+ * @param {string} sessionId
+ * @returns {string}
+ */
 const buildCacheKey = (groupJid, sessionId) => `${sessionId}:${groupJid}`;
 
+/**
+ * Normaliza o ID da sessão para os cenários de teste.
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
 const normalizeSessionId = (value) => String(value || '').trim() || 'default';
+/**
+ * Verifica se o JID pertence a grupo.
+ * @param {string | null | undefined} jid
+ * @returns {boolean}
+ */
 const isGroupJid = (jid) => String(jid || '').endsWith('@g.us');
 
 test('socketController multi-session: fencing token por assignment_version invalida writer stale', async () => {

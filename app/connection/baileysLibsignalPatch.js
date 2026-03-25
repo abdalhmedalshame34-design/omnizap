@@ -3,6 +3,12 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Interpreta string/valor de ambiente como boolean.
+ * @param {unknown} value
+ * @param {boolean} fallback
+ * @returns {boolean}
+ */
 const parseEnvBool = (value, fallback) => {
   if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -11,13 +17,39 @@ const parseEnvBool = (value, fallback) => {
   return fallback;
 };
 
+/**
+ * Habilita/desabilita patch runtime do libsignal.
+ * @type {boolean}
+ */
 const LIBSIGNAL_RUNTIME_PATCH_ENABLED = parseEnvBool(process.env.BAILEYS_LIBSIGNAL_RUNTIME_PATCH_ENABLED, true);
+/**
+ * Versão lógica do patch aplicado.
+ * @type {string}
+ */
 const PATCH_VERSION = '2026-03-25';
+/**
+ * Marker simbólico para identificar protótipos já patchados.
+ * @type {symbol}
+ */
 const PATCH_MARKER = Symbol.for('omnizap.libsignal.runtimePatch');
+/**
+ * Máximo de sessões fechadas mantidas no SessionRecord.
+ * @type {number}
+ */
 const CLOSED_SESSIONS_MAX = 40;
 
+/**
+ * Garante aplicação única por processo.
+ * @type {boolean}
+ */
 let patchAttempted = false;
 
+/**
+ * Marca um alvo como patchado.
+ * @param {object} target
+ * @param {string} [value=PATCH_VERSION]
+ * @returns {void}
+ */
 const markPatched = (target, value = PATCH_VERSION) => {
   try {
     Object.defineProperty(target, PATCH_MARKER, {
@@ -31,8 +63,17 @@ const markPatched = (target, value = PATCH_VERSION) => {
   }
 };
 
+/**
+ * Verifica se um alvo já recebeu patch runtime.
+ * @param {any} target
+ * @returns {boolean}
+ */
 const isPatched = (target) => Boolean(target?.[PATCH_MARKER]);
 
+/**
+ * Aplica patch no SessionRecord para reduzir ruído de sessões antigas.
+ * @returns {boolean} `true` quando o patch foi aplicado nesta execução.
+ */
 const patchSessionRecordLogging = () => {
   const SessionRecord = require('libsignal/src/session_record.js');
   const prototype = SessionRecord?.prototype;
@@ -71,6 +112,10 @@ const patchSessionRecordLogging = () => {
   return true;
 };
 
+/**
+ * Aplica patch no SessionCipher para reduzir ruído de decrypt em sessões inválidas.
+ * @returns {boolean} `true` quando o patch foi aplicado nesta execução.
+ */
 const patchSessionCipherNoise = () => {
   const SessionCipher = require('libsignal/src/session_cipher.js');
   const errors = require('libsignal/src/errors.js');
@@ -124,6 +169,10 @@ const patchSessionCipherNoise = () => {
   return true;
 };
 
+/**
+ * Aplica patches runtime do libsignal de forma idempotente.
+ * @returns {void}
+ */
 export const applyLibsignalRuntimePatch = () => {
   if (patchAttempted) return;
   patchAttempted = true;

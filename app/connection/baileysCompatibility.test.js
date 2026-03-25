@@ -6,12 +6,21 @@ import test from 'node:test';
 
 import { initAuthCreds, proto } from '@whiskeysockets/baileys';
 
+/**
+ * Referência do fork/branch do Baileys validada pelos testes.
+ * @type {string}
+ */
 const PINNED_BAILEYS_REF = 'github:jlucaso1/Baileys#feat-add-stickerpack-support';
 
 const require = createRequire(import.meta.url);
 const baileysPackageJsonPath = require.resolve('@whiskeysockets/baileys/package.json');
 const baileysPackageDir = path.dirname(baileysPackageJsonPath);
 
+/**
+ * Lê um arquivo de tipos dentro do pacote instalado do Baileys.
+ * @param {string} relativePath
+ * @returns {Promise<string>}
+ */
 const readBaileysTypeFile = async (relativePath) => readFile(path.join(baileysPackageDir, relativePath), 'utf8');
 
 test('Auth.d.ts expõe AuthenticationState compatível com SocketConfig.auth', async () => {

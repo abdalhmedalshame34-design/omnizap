@@ -138,13 +138,30 @@ const BAILEYS_GROUP_METADATA_CACHE_TTL_SECONDS = parseEnvInt(process.env.BAILEYS
  */
 const BAILEYS_GROUP_METADATA_CACHE_CHECKPERIOD_SECONDS = parseEnvInt(process.env.BAILEYS_GROUP_METADATA_CACHE_CHECKPERIOD_SECONDS, 60, 10, 1800);
 /**
- * Identificador lógico da sessão de autenticação do Baileys no MySQL.
- * Permite isolar múltiplas sessões no mesmo banco.
- * @type {string}
+ * Configuração de runtime para múltiplas sessões do Baileys.
+ * @type {{
+ *   sessionIds?: string[],
+ *   primarySessionId?: string,
+ *   ownerLeaseMs?: number,
+ *   ownerHeartbeatMs?: number,
+ *   sessionWeights?: Record<string, number>
+ * }}
  */
 const MULTI_SESSION_RUNTIME_CONFIG = getMultiSessionRuntimeConfig();
+/**
+ * Lista imutável de IDs de sessão habilitadas.
+ * @type {readonly string[]}
+ */
 const BAILEYS_SESSION_IDS = Object.freeze(Array.isArray(MULTI_SESSION_RUNTIME_CONFIG?.sessionIds) && MULTI_SESSION_RUNTIME_CONFIG.sessionIds.length > 0 ? [...MULTI_SESSION_RUNTIME_CONFIG.sessionIds] : [String(process.env.BAILEYS_AUTH_SESSION_ID || 'default').trim() || 'default']);
+/**
+ * Conjunto para consultas rápidas de sessão válida.
+ * @type {Set<string>}
+ */
 const BAILEYS_SESSION_ID_SET = new Set(BAILEYS_SESSION_IDS);
+/**
+ * ID de sessão principal usado como fallback.
+ * @type {string}
+ */
 const BAILEYS_PRIMARY_SESSION_ID = String(MULTI_SESSION_RUNTIME_CONFIG?.primarySessionId || BAILEYS_SESSION_IDS[0] || 'default').trim() || 'default';
 /**
  * Habilita bootstrap inicial do auth state no MySQL usando os arquivos locais legados.
@@ -177,6 +194,11 @@ const BAILEYS_SINGLE_WRITER_LOCK_NAME_BASE = (() => {
   return `omnizap:baileys:writer:${dbLabel}`;
 })();
 
+/**
+ * Normaliza um ID de sessão, garantindo fallback para a sessão principal.
+ * @param {string | null | undefined} sessionId
+ * @returns {string}
+ */
 const normalizeSessionId = (sessionId) => {
   const normalized = String(sessionId || '').trim();
   if (!normalized) return BAILEYS_PRIMARY_SESSION_ID;
@@ -184,6 +206,11 @@ const normalizeSessionId = (sessionId) => {
   return normalized;
 };
 
+/**
+ * Resolve o nome final do lock de escritor único para uma sessão.
+ * @param {string | null | undefined} sessionId
+ * @returns {string}
+ */
 const getWriterLockNameBySession = (sessionId) => {
   const safeSessionId = normalizeSessionId(sessionId);
   const base = BAILEYS_SINGLE_WRITER_LOCK_NAME_BASE;
@@ -193,19 +220,45 @@ const getWriterLockNameBySession = (sessionId) => {
   return `${base}:${safeSessionId}`;
 };
 
+/**
+ * TTL do cache local de ownership de grupo (em milissegundos).
+ * @type {number}
+ */
 const GROUP_OWNER_WRITE_CACHE_TTL_MS = parseEnvInt(process.env.GROUP_OWNER_WRITE_CACHE_TTL_MS, Math.max(2_000, Math.floor((Number(MULTI_SESSION_RUNTIME_CONFIG?.ownerHeartbeatMs) || 30_000) / 3)), 1_000, 60_000);
+/**
+ * Permite tentar reivindicar ownership no miss de cache.
+ * @type {boolean}
+ */
 const GROUP_OWNER_WRITE_CLAIM_ON_MISS = parseEnvBool(process.env.GROUP_OWNER_WRITE_CLAIM_ON_MISS, true);
+/**
+ * Duração da lease de ownership por sessão (em milissegundos).
+ * @type {number}
+ */
 const GROUP_OWNER_LEASE_MS = Math.max(5_000, Number(MULTI_SESSION_RUNTIME_CONFIG?.ownerLeaseMs) || 120_000);
+/**
+ * Intervalo de heartbeat de ownership (em milissegundos).
+ * @type {number}
+ */
 let GROUP_OWNER_HEARTBEAT_MS = parseEnvInt(process.env.GROUP_OWNER_HEARTBEAT_RUNTIME_MS, Math.max(1_000, Math.min(GROUP_OWNER_LEASE_MS - 500, Number(MULTI_SESSION_RUNTIME_CONFIG?.ownerHeartbeatMs) || 30_000)), 1_000, 5 * 60 * 1000);
 if (GROUP_OWNER_HEARTBEAT_MS >= GROUP_OWNER_LEASE_MS) {
   GROUP_OWNER_HEARTBEAT_MS = Math.max(1_000, Math.floor(GROUP_OWNER_LEASE_MS / 2));
 }
+/**
+ * Cache local de decisões de escrita por ownership de grupo.
+ * @type {NodeCache}
+ */
 const groupOwnerWriteStateCache = new NodeCache({
   stdTTL: Math.max(1, Math.ceil(GROUP_OWNER_WRITE_CACHE_TTL_MS / 1000)),
   checkperiod: Math.max(1, Math.ceil(GROUP_OWNER_WRITE_CACHE_TTL_MS / 1000)),
   useClones: false,
 });
 
+/**
+ * Monta a chave de cache de ownership para uma combinação sessão+grupo.
+ * @param {string | null | undefined} groupJid
+ * @param {string | null | undefined} sessionId
+ * @returns {string}
+ */
 const buildGroupOwnerWriteCacheKey = (groupJid, sessionId) => {
   const safeGroupJid = String(groupJid || '').trim();
   const safeSessionId = normalizeSessionId(sessionId);
@@ -213,6 +266,11 @@ const buildGroupOwnerWriteCacheKey = (groupJid, sessionId) => {
   return `${safeSessionId}:${safeGroupJid}`;
 };
 
+/**
+ * Remove do cache todas as entradas de ownership da sessão informada.
+ * @param {string | null | undefined} sessionId
+ * @returns {void}
+ */
 const clearGroupOwnerWriteCacheForSession = (sessionId) => {
   const safeSessionId = normalizeSessionId(sessionId);
   const prefix = `${safeSessionId}:`;
@@ -351,6 +409,11 @@ let activeSocket = null;
  */
 const sessionContexts = new Map();
 
+/**
+ * Cria o contexto de runtime inicial para uma sessão.
+ * @param {string} sessionId
+ * @returns {SessionContext}
+ */
 const createSessionContext = (sessionId) => ({
   sessionId,
   socket: null,
@@ -364,6 +427,12 @@ const createSessionContext = (sessionId) => ({
   ownerHeartbeatInFlight: false,
 });
 
+/**
+ * Obtém o contexto de runtime de uma sessão.
+ * @param {string | null | undefined} sessionId
+ * @param {{ createIfMissing?: boolean }} [options]
+ * @returns {SessionContext | null}
+ */
 const getSessionContext = (sessionId, { createIfMissing = true } = {}) => {
   const safeSessionId = normalizeSessionId(sessionId);
   let context = sessionContexts.get(safeSessionId);
@@ -374,6 +443,11 @@ const getSessionContext = (sessionId, { createIfMissing = true } = {}) => {
   return context || null;
 };
 
+/**
+ * Resolve qual socket deve ser exposto como "ativo" no runtime legado.
+ * Prioriza a sessão principal quando conectada.
+ * @returns {import('@whiskeysockets/baileys').WASocket | null}
+ */
 const resolvePreferredActiveSocket = () => {
   const primaryContext = getSessionContext(BAILEYS_PRIMARY_SESSION_ID, { createIfMissing: false });
   if (isSocketOpen(primaryContext?.socket)) return primaryContext.socket;
@@ -385,6 +459,10 @@ const resolvePreferredActiveSocket = () => {
   return primaryContext?.socket || null;
 };
 
+/**
+ * Sincroniza a referência legada `activeSocket` com os contextos por sessão.
+ * @returns {void}
+ */
 const syncLegacyActiveSocketReference = () => {
   activeSocket = resolvePreferredActiveSocket();
 };
@@ -1520,6 +1598,11 @@ const ensureBaileysWriterLock = async (sessionId) => {
   }
 };
 
+/**
+ * Libera todos os locks de escritor mantidos pelo processo atual.
+ * @param {string} [reason='unknown']
+ * @returns {Promise<void>}
+ */
 const releaseAllBaileysWriterLocks = async (reason = 'unknown') => {
   const targets = Array.from(sessionContexts.keys());
   if (!targets.length) {
@@ -1622,6 +1705,7 @@ const syncGroupsOnConnectionOpen = async (sock) => {
  * Configura autenticação, cria o socket e registra handlers de eventos.
  * Gerencia a lógica de reconexão e a distribuição de eventos.
  * @async
+ * @param {string} [sessionId=BAILEYS_PRIMARY_SESSION_ID] - Sessão alvo da conexão.
  * @returns {Promise<void>} Conclusão da inicialização e do registro de handlers.
  * @throws {Error} Lança erro se a conexão inicial falhar.
  */

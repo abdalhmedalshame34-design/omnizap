@@ -5,15 +5,37 @@ import { parseParticipantsFromDb } from '../services/group/groupMetadataService.
 import { extractUserIdInfo, resolveUserIdCached } from './baileysConfig.js';
 import { getActiveSocket, runSocketMethod } from './baileysConfig.js';
 
+/**
+ * Comprimento mínimo de telefone válido para extração de usuário.
+ * @type {number}
+ */
 const USER_ID_DIGITS_MIN = 10;
+/**
+ * Comprimento máximo de telefone válido para extração de usuário.
+ * @type {number}
+ */
 const USER_ID_DIGITS_MAX = 15;
+/**
+ * Sufixo oficial de JID de grupos.
+ * @type {string}
+ */
 const GROUP_ID_SUFFIX = '@g.us';
 
+/**
+ * Converte valor para string não vazia (trim), ou vazio.
+ * @param {unknown} value
+ * @returns {string}
+ */
 const _toNonEmptyString = (value) => {
   if (typeof value !== 'string') return '';
   return value.trim();
 };
 
+/**
+ * Normaliza qualquer JID possível preservando entradas sem domínio.
+ * @param {unknown} value
+ * @returns {string}
+ */
 const _normalizeAnyJid = (value) => {
   const raw = _toNonEmptyString(value);
   if (!raw) return '';
@@ -21,6 +43,11 @@ const _normalizeAnyJid = (value) => {
   return normalizeJid(raw) || raw;
 };
 
+/**
+ * Normaliza e valida ID de grupo.
+ * @param {unknown} groupId
+ * @returns {string}
+ */
 const _normalizeGroupId = (groupId) => {
   const normalized = _normalizeAnyJid(groupId);
   if (!normalized) return '';
@@ -29,6 +56,11 @@ const _normalizeGroupId = (groupId) => {
   return '';
 };
 
+/**
+ * Normaliza candidatos de identidade de usuário (JID/LID/telefone).
+ * @param {unknown} value
+ * @returns {string}
+ */
 const _normalizeUserIdCandidate = (value) => {
   const raw = _toNonEmptyString(value);
   if (!raw) return '';
@@ -46,10 +78,19 @@ const _normalizeUserIdCandidate = (value) => {
   return jidCandidate;
 };
 
+/**
+ * Coleta candidatos de identidade de usuário a partir de string/objeto.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
 const _collectUserIdCandidates = (value) => {
   if (!value) return [];
 
   const candidates = [];
+  /**
+   * @param {unknown} candidate
+   * @returns {void}
+   */
   const pushCandidate = (candidate) => {
     const normalized = _normalizeUserIdCandidate(candidate);
     if (!normalized) return;
@@ -79,12 +120,21 @@ const _collectUserIdCandidates = (value) => {
   return candidates;
 };
 
+/**
+ * Extrai candidatos de identidade a partir de um participante.
+ * @param {unknown} participant
+ * @returns {string[]}
+ */
 const _extractParticipantCandidates = (participant) => {
   if (!participant) return [];
   const raw = typeof participant === 'string' ? { id: participant } : participant;
 
   const info = extractUserIdInfo(raw);
   const candidates = [];
+  /**
+   * @param {unknown} candidate
+   * @returns {void}
+   */
   const pushCandidate = (candidate) => {
     const normalized = _normalizeUserIdCandidate(candidate);
     if (!normalized) return;
@@ -106,6 +156,11 @@ const _extractParticipantCandidates = (participant) => {
   return candidates;
 };
 
+/**
+ * Resolve versão canônica de usuário via cache LID/JID.
+ * @param {unknown} value
+ * @returns {string}
+ */
 const _resolveCanonicalCachedUserId = (value) => {
   const normalized = _normalizeUserIdCandidate(value);
   if (!normalized) return '';
@@ -117,6 +172,12 @@ const _resolveCanonicalCachedUserId = (value) => {
   return _normalizeUserIdCandidate(resolved || normalized);
 };
 
+/**
+ * Verifica equivalência entre dois identificadores de usuário.
+ * @param {unknown} leftValue
+ * @param {unknown} rightValue
+ * @returns {boolean}
+ */
 const _areUserIdsEquivalent = (leftValue, rightValue) => {
   const left = _normalizeUserIdCandidate(leftValue);
   const right = _normalizeUserIdCandidate(rightValue);
@@ -142,8 +203,19 @@ const _areUserIdsEquivalent = (leftValue, rightValue) => {
   return leftDigits === rightDigits || leftDigits.endsWith(rightDigits) || rightDigits.endsWith(leftDigits);
 };
 
+/**
+ * Indica se um participante é admin/superadmin.
+ * @param {any} participant
+ * @returns {boolean}
+ */
 const _isParticipantAdmin = (participant) => Boolean(participant && (participant.admin === 'admin' || participant.admin === 'superadmin' || participant.isAdmin === true));
 
+/**
+ * Detecta se valor se comporta como socket Baileys.
+ * @param {unknown} value
+ * @param {string} [methodName]
+ * @returns {boolean}
+ */
 const _isSocketLike = (value, methodName) => {
   if (!value || typeof value !== 'object') return false;
   if (methodName && typeof value[methodName] === 'function') return true;
@@ -152,6 +224,12 @@ const _isSocketLike = (value, methodName) => {
   return false;
 };
 
+/**
+ * Resolve assinatura flexível `sock + args` para helpers de grupo.
+ * @param {string} methodName
+ * @param {any[]} [inputArgs=[]]
+ * @returns {{sock: any, args: any[]}}
+ */
 const _resolveSocketAndArgs = (methodName, inputArgs = []) => {
   const [firstArg, ...remaining] = inputArgs;
   if (_isSocketLike(firstArg, methodName)) {
@@ -167,6 +245,11 @@ const _resolveSocketAndArgs = (methodName, inputArgs = []) => {
   };
 };
 
+/**
+ * Normaliza lista de participantes removendo duplicados equivalentes.
+ * @param {any[]} [participants=[]]
+ * @returns {string[]}
+ */
 const _normalizeParticipantsInput = (participants = []) => {
   if (!Array.isArray(participants)) return [];
   const normalized = [];
@@ -179,6 +262,11 @@ const _normalizeParticipantsInput = (participants = []) => {
   return normalized;
 };
 
+/**
+ * Converte valor para número finito ou `null`.
+ * @param {unknown} value
+ * @returns {number|null}
+ */
 const _normalizeNumberOrNull = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -254,11 +342,22 @@ export async function isUserAdmin(groupId, userIdOrObj) {
   return await isUserAdminAsync(groupId, userIdOrObj);
 }
 
+/**
+ * Mantém apenas dígitos de uma string.
+ * @param {string} str
+ * @returns {string}
+ */
 export function _normalizeDigits(str) {
   if (!str || typeof str !== 'string') return '';
   return str.replace(/\D/g, '');
 }
 
+/**
+ * Verifica se o participante corresponde ao usuário informado.
+ * @param {any} participant
+ * @param {unknown} userIdOrObj
+ * @returns {boolean}
+ */
 export function _matchesParticipantId(participant, userIdOrObj) {
   if (!participant || !userIdOrObj) return false;
   const participantCandidates = _extractParticipantCandidates(participant);
@@ -315,11 +414,22 @@ export async function getGroupInfoAsync(groupId) {
   }
 }
 
+/**
+ * Retorna participantes normalizados do grupo.
+ * @param {string} groupId
+ * @returns {Promise<Array<object>|null>}
+ */
 export async function getGroupParticipantsAsync(groupId) {
   const group = await getGroupInfoAsync(groupId);
   return group ? group.participants : null;
 }
 
+/**
+ * Versão assíncrona de validação de admin no grupo.
+ * @param {string} groupId
+ * @param {string|object} userIdOrObj
+ * @returns {Promise<boolean>}
+ */
 export async function isUserAdminAsync(groupId, userIdOrObj) {
   const normalizedGroupId = _normalizeGroupId(groupId);
   const userCandidates = _collectUserIdCandidates(userIdOrObj);
@@ -331,6 +441,11 @@ export async function isUserAdminAsync(groupId, userIdOrObj) {
   return participants.some((participant) => _isParticipantAdmin(participant) && userCandidates.some((candidate) => _matchesParticipantId(participant, candidate)));
 }
 
+/**
+ * Retorna administradores normalizados de um grupo.
+ * @param {string} groupId
+ * @returns {Promise<string[]>}
+ */
 export async function getGroupAdminsAsync(groupId) {
   const normalizedGroupId = _normalizeGroupId(groupId);
   if (!_isValidId(normalizedGroupId, 'Grupo')) return [];
@@ -491,6 +606,14 @@ export async function _safeGroupApiCall(sock, functionName, args, errorMessage) 
   }
 }
 
+/**
+ * Cria grupo no WhatsApp.
+ * Aceita assinatura flexível com ou sem socket explícito.
+ * @param {any} sockOrTitle
+ * @param {string|Array<any>} titleOrParticipants
+ * @param {Array<any>} [participantsMaybe]
+ * @returns {Promise<any>}
+ */
 export async function createGroup(sockOrTitle, titleOrParticipants, participantsMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupCreate', [sockOrTitle, titleOrParticipants, participantsMaybe]);
   const [title, participants] = args;
@@ -509,6 +632,14 @@ export async function createGroup(sockOrTitle, titleOrParticipants, participants
   return result;
 }
 
+/**
+ * Atualiza participantes de grupo (add/remove/promote/demote).
+ * @param {any} sockOrGroupId
+ * @param {string|Array<any>} groupIdOrParticipants
+ * @param {Array<any>|string} participantsOrAction
+ * @param {string} [actionMaybe]
+ * @returns {Promise<any>}
+ */
 export async function updateGroupParticipants(sockOrGroupId, groupIdOrParticipants, participantsOrAction, actionMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupParticipantsUpdate', [sockOrGroupId, groupIdOrParticipants, participantsOrAction, actionMaybe]);
   const [groupId, participants, action] = args;
@@ -524,6 +655,13 @@ export async function updateGroupParticipants(sockOrGroupId, groupIdOrParticipan
   return _safeGroupApiCall(sock, 'groupParticipantsUpdate', [normalizedGroupId, normalizedParticipants, normalizedAction], `Erro ao ${normalizedAction} participantes no grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Atualiza assunto do grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} groupIdOrSubject
+ * @param {string} [subjectMaybe]
+ * @returns {Promise<any>}
+ */
 export async function updateGroupSubject(sockOrGroupId, groupIdOrSubject, subjectMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupUpdateSubject', [sockOrGroupId, groupIdOrSubject, subjectMaybe]);
   const [groupId, subject] = args;
@@ -538,6 +676,13 @@ export async function updateGroupSubject(sockOrGroupId, groupIdOrSubject, subjec
   return _safeGroupApiCall(sock, 'groupUpdateSubject', [normalizedGroupId, normalizedSubject], `Erro ao atualizar assunto do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Atualiza descrição do grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} groupIdOrDescription
+ * @param {string} [descriptionMaybe]
+ * @returns {Promise<any>}
+ */
 export async function updateGroupDescription(sockOrGroupId, groupIdOrDescription, descriptionMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupUpdateDescription', [sockOrGroupId, groupIdOrDescription, descriptionMaybe]);
   const [groupId, description] = args;
@@ -550,6 +695,13 @@ export async function updateGroupDescription(sockOrGroupId, groupIdOrDescription
   return _safeGroupApiCall(sock, 'groupUpdateDescription', [normalizedGroupId, description], `Erro ao atualizar descrição do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Atualiza configuração geral do grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} groupIdOrSetting
+ * @param {string} [settingMaybe]
+ * @returns {Promise<any>}
+ */
 export async function updateGroupSettings(sockOrGroupId, groupIdOrSetting, settingMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupSettingUpdate', [sockOrGroupId, groupIdOrSetting, settingMaybe]);
   const [groupId, setting] = args;
@@ -564,6 +716,12 @@ export async function updateGroupSettings(sockOrGroupId, groupIdOrSetting, setti
   return _safeGroupApiCall(sock, 'groupSettingUpdate', [normalizedGroupId, normalizedSetting], `Erro ao atualizar configurações do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Sai de um grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} [groupIdMaybe]
+ * @returns {Promise<any>}
+ */
 export async function leaveGroup(sockOrGroupId, groupIdMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupLeave', [sockOrGroupId, groupIdMaybe]);
   const [groupId] = args;
@@ -576,6 +734,12 @@ export async function leaveGroup(sockOrGroupId, groupIdMaybe) {
   return _safeGroupApiCall(sock, 'groupLeave', [normalizedGroupId], `Erro ao sair do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Obtém código de convite do grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} [groupIdMaybe]
+ * @returns {Promise<any>}
+ */
 export async function getGroupInviteCode(sockOrGroupId, groupIdMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupInviteCode', [sockOrGroupId, groupIdMaybe]);
   const [groupId] = args;
@@ -588,6 +752,12 @@ export async function getGroupInviteCode(sockOrGroupId, groupIdMaybe) {
   return _safeGroupApiCall(sock, 'groupInviteCode', [normalizedGroupId], `Erro ao obter código de convite do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Revoga o código de convite atual do grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} [groupIdMaybe]
+ * @returns {Promise<any>}
+ */
 export async function revokeGroupInviteCode(sockOrGroupId, groupIdMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupRevokeInvite', [sockOrGroupId, groupIdMaybe]);
   const [groupId] = args;
@@ -600,6 +770,12 @@ export async function revokeGroupInviteCode(sockOrGroupId, groupIdMaybe) {
   return _safeGroupApiCall(sock, 'groupRevokeInvite', [normalizedGroupId], `Erro ao revogar código de convite do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Aceita convite de grupo via código.
+ * @param {any} sockOrCode
+ * @param {string} [codeMaybe]
+ * @returns {Promise<any>}
+ */
 export async function acceptGroupInvite(sockOrCode, codeMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupAcceptInvite', [sockOrCode, codeMaybe]);
   const [code] = args;
@@ -612,6 +788,12 @@ export async function acceptGroupInvite(sockOrCode, codeMaybe) {
   return _safeGroupApiCall(sock, 'groupAcceptInvite', [normalizedCode], 'Erro ao aceitar convite de grupo');
 }
 
+/**
+ * Obtém metadados de convite de grupo.
+ * @param {any} sockOrCode
+ * @param {string} [codeMaybe]
+ * @returns {Promise<any>}
+ */
 export async function getGroupInfoFromInvite(sockOrCode, codeMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupGetInviteInfo', [sockOrCode, codeMaybe]);
   const [code] = args;
@@ -624,6 +806,12 @@ export async function getGroupInfoFromInvite(sockOrCode, codeMaybe) {
   return _safeGroupApiCall(sock, 'groupGetInviteInfo', [normalizedCode], 'Erro ao obter informações do convite');
 }
 
+/**
+ * Obtém metadados completos do grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} [groupIdMaybe]
+ * @returns {Promise<any>}
+ */
 export async function getGroupMetadata(sockOrGroupId, groupIdMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupMetadata', [sockOrGroupId, groupIdMaybe]);
   const [groupId] = args;
@@ -636,6 +824,12 @@ export async function getGroupMetadata(sockOrGroupId, groupIdMaybe) {
   return _safeGroupApiCall(sock, 'groupMetadata', [normalizedGroupId], `Erro ao obter metadados do grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Lista solicitações pendentes de entrada no grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} [groupIdMaybe]
+ * @returns {Promise<any>}
+ */
 export async function getGroupRequestParticipantsList(sockOrGroupId, groupIdMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupRequestParticipantsList', [sockOrGroupId, groupIdMaybe]);
   const [groupId] = args;
@@ -648,6 +842,14 @@ export async function getGroupRequestParticipantsList(sockOrGroupId, groupIdMayb
   return _safeGroupApiCall(sock, 'groupRequestParticipantsList', [normalizedGroupId], `Erro ao listar solicitações de entrada no grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Atualiza solicitações de entrada no grupo.
+ * @param {any} sockOrGroupId
+ * @param {string|Array<any>} groupIdOrParticipants
+ * @param {Array<any>|string} participantsOrAction
+ * @param {string} [actionMaybe]
+ * @returns {Promise<any>}
+ */
 export async function updateGroupRequestParticipants(sockOrGroupId, groupIdOrParticipants, participantsOrAction, actionMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupRequestParticipantsUpdate', [sockOrGroupId, groupIdOrParticipants, participantsOrAction, actionMaybe]);
   const [groupId, participants, action] = args;
@@ -663,11 +865,23 @@ export async function updateGroupRequestParticipants(sockOrGroupId, groupIdOrPar
   return _safeGroupApiCall(sock, 'groupRequestParticipantsUpdate', [normalizedGroupId, normalizedParticipants, normalizedAction], `Erro ao atualizar solicitações de entrada no grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Busca todos os grupos participantes da conta conectada.
+ * @param {any} [sock]
+ * @returns {Promise<any>}
+ */
 export async function getAllParticipatingGroups(sock) {
   const socket = _isSocketLike(sock, 'groupFetchAllParticipating') ? sock : null;
   return _safeGroupApiCall(socket, 'groupFetchAllParticipating', [], 'Erro ao obter todos os grupos participantes');
 }
 
+/**
+ * Ativa/desativa mensagens efêmeras no grupo.
+ * @param {any} sockOrGroupId
+ * @param {string|number} groupIdOrDuration
+ * @param {number} [durationMaybe]
+ * @returns {Promise<any>}
+ */
 export async function toggleEphemeral(sockOrGroupId, groupIdOrDuration, durationMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupToggleEphemeral', [sockOrGroupId, groupIdOrDuration, durationMaybe]);
   const [groupId, duration] = args;
@@ -682,6 +896,13 @@ export async function toggleEphemeral(sockOrGroupId, groupIdOrDuration, duration
   return _safeGroupApiCall(sock, 'groupToggleEphemeral', [normalizedGroupId, normalizedDuration], `Erro ao alternar mensagens efêmeras no grupo ${normalizedGroupId}`);
 }
 
+/**
+ * Atualiza modo de adição de membros no grupo.
+ * @param {any} sockOrGroupId
+ * @param {string} groupIdOrMode
+ * @param {string} [modeMaybe]
+ * @returns {Promise<any>}
+ */
 export async function updateGroupAddMode(sockOrGroupId, groupIdOrMode, modeMaybe) {
   const { sock, args } = _resolveSocketAndArgs('groupMemberAddMode', [sockOrGroupId, groupIdOrMode, modeMaybe]);
   const [groupId, mode] = args;

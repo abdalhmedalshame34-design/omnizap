@@ -1,8 +1,30 @@
+/**
+ * Sessão padrão usada como fallback.
+ * @type {string}
+ */
 const DEFAULT_SESSION_ID = 'default';
+/**
+ * Tamanho máximo permitido para IDs de sessão.
+ * @type {number}
+ */
 const SESSION_ID_MAX_LENGTH = 64;
+/**
+ * Regex de validação para IDs de sessão.
+ * @type {RegExp}
+ */
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9:_-]+$/;
+/**
+ * Modos de enforcement válidos para ownership de grupo.
+ * @type {Set<string>}
+ */
 const OWNER_ENFORCEMENT_MODES = new Set(['off', 'shadow', 'enforce']);
 
+/**
+ * Converte um valor de ambiente para boolean com fallback.
+ * @param {unknown} value
+ * @param {boolean} fallback
+ * @returns {boolean}
+ */
 const parseEnvBool = (value, fallback) => {
   if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -11,20 +33,43 @@ const parseEnvBool = (value, fallback) => {
   return fallback;
 };
 
+/**
+ * Converte um valor em inteiro com limites.
+ * @param {unknown} value
+ * @param {number} fallback
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
 const parseEnvInt = (value, fallback, min, max) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(parsed)));
 };
 
+/**
+ * Faz parse de entradas separadas por vírgula, quebra de linha ou `;`.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
 const parseFlexibleEntries = (value) =>
   String(value || '')
     .split(/[,\n;]+/g)
     .map((entry) => String(entry || '').trim())
     .filter(Boolean);
 
+/**
+ * Normaliza um ID de sessão.
+ * @param {unknown} value
+ * @returns {string}
+ */
 const normalizeSessionId = (value) => String(value || '').trim();
 
+/**
+ * Valida formato e tamanho de ID de sessão.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 const isValidSessionId = (value) => {
   const normalized = normalizeSessionId(value);
   if (!normalized) return false;
@@ -32,6 +77,14 @@ const isValidSessionId = (value) => {
   return SESSION_ID_PATTERN.test(normalized);
 };
 
+/**
+ * @typedef {{sessionIds: string[], warnings: string[]}} ParsedSessionIds
+ */
+/**
+ * Interpreta lista de sessões do ambiente e aplica fallback legado.
+ * @param {{sessionIdsRaw?: string, legacySessionIdRaw?: string}} [params]
+ * @returns {ParsedSessionIds}
+ */
 const parseSessionIds = ({ sessionIdsRaw = '', legacySessionIdRaw = '' } = {}) => {
   const warnings = [];
   const validSessionIds = [];
@@ -63,6 +116,13 @@ const parseSessionIds = ({ sessionIdsRaw = '', legacySessionIdRaw = '' } = {}) =
   };
 };
 
+/**
+ * Resolve pesos por sessão com validação e defaults.
+ * @param {unknown} rawValue
+ * @param {string[]} sessionIds
+ * @param {string[]} warnings
+ * @returns {Record<string, number>}
+ */
 const parseSessionWeights = (rawValue, sessionIds, warnings) => {
   const allowedSessions = new Set(sessionIds);
   const weights = {};
@@ -102,6 +162,23 @@ const parseSessionWeights = (rawValue, sessionIds, warnings) => {
   return weights;
 };
 
+/**
+ * @typedef {{
+ *   sessionIds: readonly string[],
+ *   primarySessionId: string,
+ *   sessionWeights: Readonly<Record<string, number>>,
+ *   ownerEnforcementMode: 'off'|'shadow'|'enforce',
+ *   ownerLeaseMs: number,
+ *   ownerHeartbeatMs: number,
+ *   balancerEnabled: boolean,
+ *   warnings: readonly string[]
+ * }} MultiSessionRuntimeConfig
+ */
+/**
+ * Resolve a configuração de runtime para múltiplas sessões.
+ * @param {Record<string, any>} [env=process.env]
+ * @returns {MultiSessionRuntimeConfig}
+ */
 export const resolveMultiSessionRuntimeConfig = (env = process.env) => {
   const warnings = [];
   const legacySessionId = normalizeSessionId(env.BAILEYS_AUTH_SESSION_ID) || DEFAULT_SESSION_ID;
@@ -152,6 +229,14 @@ export const resolveMultiSessionRuntimeConfig = (env = process.env) => {
   });
 };
 
+/**
+ * Configuração resolvida uma única vez por processo.
+ * @type {MultiSessionRuntimeConfig}
+ */
 export const multiSessionRuntimeConfig = resolveMultiSessionRuntimeConfig();
 
+/**
+ * Retorna a configuração de runtime multi-sessão.
+ * @returns {MultiSessionRuntimeConfig}
+ */
 export const getMultiSessionRuntimeConfig = () => multiSessionRuntimeConfig;

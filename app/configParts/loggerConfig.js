@@ -2,14 +2,50 @@ import pino from 'pino';
 import { criarInstanciaLogger } from '@kaikybrofc/logger-module';
 import baseLogger from '#logger';
 
+/**
+ * Label padrão para logger do Baileys.
+ * @type {string}
+ */
 const DEFAULT_BAILEYS_LABEL = 'baileys';
+/**
+ * Modo padrão de logger raiz.
+ * @type {'child'|'instance'}
+ */
 const DEFAULT_BAILEYS_LOGGER_MODE = 'child';
+/**
+ * Modos aceitos de logger raiz.
+ * @type {Set<string>}
+ */
 const BAILEYS_LOGGER_MODES = new Set(['child', 'instance']);
+/**
+ * Modo padrão do logger de socket.
+ * @type {'silent'|'pino'|'bridge'}
+ */
 const DEFAULT_BAILEYS_SOCKET_LOGGER_MODE = 'silent';
+/**
+ * Modos aceitos de logger de socket.
+ * @type {Set<string>}
+ */
 const BAILEYS_SOCKET_LOGGER_MODES = new Set(['silent', 'pino', 'bridge']);
+/**
+ * Nível padrão para pino.
+ * @type {string}
+ */
 const DEFAULT_PINO_LEVEL = 'info';
+/**
+ * Nível pino para suprimir logs.
+ * @type {string}
+ */
 const DEFAULT_PINO_SILENT_LEVEL = 'silent';
+/**
+ * Conjunto de níveis pino válidos.
+ * @type {Set<string>}
+ */
 const PINO_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']);
+/**
+ * Prioridade numérica dos níveis pino.
+ * @type {Readonly<Record<string, number>>}
+ */
 const PINO_LEVEL_PRIORITY = Object.freeze({
   trace: 10,
   debug: 20,
@@ -19,6 +55,10 @@ const PINO_LEVEL_PRIORITY = Object.freeze({
   fatal: 60,
   silent: Number.POSITIVE_INFINITY,
 });
+/**
+ * Mapeamento de níveis do bridge pino->winston.
+ * @type {Readonly<Record<string, string>>}
+ */
 const BAILEYS_TO_WINSTON_LEVEL = Object.freeze({
   trace: 'debug',
   debug: 'debug',
@@ -26,6 +66,10 @@ const BAILEYS_TO_WINSTON_LEVEL = Object.freeze({
   warn: 'warn',
   error: 'error',
 });
+/**
+ * Prioridade por método de log esperado pelo Baileys.
+ * @type {Readonly<Record<string, number>>}
+ */
 const BAILEYS_LOG_METHOD_PRIORITY = Object.freeze({
   trace: 10,
   debug: 20,
@@ -34,6 +78,12 @@ const BAILEYS_LOG_METHOD_PRIORITY = Object.freeze({
   error: 50,
 });
 
+/**
+ * Interpreta valor de ambiente booleano.
+ * @param {unknown} value
+ * @param {boolean} fallback
+ * @returns {boolean}
+ */
 const parseEnvBool = (value, fallback) => {
   if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -42,6 +92,13 @@ const parseEnvBool = (value, fallback) => {
   return fallback;
 };
 
+/**
+ * Faz parse de JSON objeto com fallback seguro.
+ * @param {unknown} value
+ * @param {Record<string, any>} [fallback={}]
+ * @param {string} [context='JSON']
+ * @returns {Record<string, any>}
+ */
 const parseJsonObject = (value, fallback = {}, context = 'JSON') => {
   if (value === undefined || value === null || String(value).trim() === '') {
     return { ...fallback };
@@ -61,6 +118,11 @@ const parseJsonObject = (value, fallback = {}, context = 'JSON') => {
   }
 };
 
+/**
+ * Faz parse de definições de transportes customizados.
+ * @param {unknown} value
+ * @returns {Array<{type: string, options: Record<string, any>}>|undefined}
+ */
 const parseTransportDefinitions = (value) => {
   if (value === undefined || value === null || String(value).trim() === '') {
     return undefined;
@@ -80,6 +142,12 @@ const parseTransportDefinitions = (value) => {
   }
 };
 
+/**
+ * Normaliza modo do logger raiz.
+ * @param {unknown} value
+ * @param {'child'|'instance'} [fallback=DEFAULT_BAILEYS_LOGGER_MODE]
+ * @returns {'child'|'instance'}
+ */
 const normalizeLoggerMode = (value, fallback = DEFAULT_BAILEYS_LOGGER_MODE) => {
   const normalized = String(value || '')
     .trim()
@@ -87,6 +155,12 @@ const normalizeLoggerMode = (value, fallback = DEFAULT_BAILEYS_LOGGER_MODE) => {
   return BAILEYS_LOGGER_MODES.has(normalized) ? normalized : fallback;
 };
 
+/**
+ * Normaliza modo do logger de socket.
+ * @param {unknown} value
+ * @param {'silent'|'pino'|'bridge'} [fallback=DEFAULT_BAILEYS_SOCKET_LOGGER_MODE]
+ * @returns {'silent'|'pino'|'bridge'}
+ */
 const normalizeSocketLoggerMode = (value, fallback = DEFAULT_BAILEYS_SOCKET_LOGGER_MODE) => {
   const normalized = String(value || '')
     .trim()
@@ -94,6 +168,12 @@ const normalizeSocketLoggerMode = (value, fallback = DEFAULT_BAILEYS_SOCKET_LOGG
   return BAILEYS_SOCKET_LOGGER_MODES.has(normalized) ? normalized : fallback;
 };
 
+/**
+ * Normaliza label de logger.
+ * @param {unknown} value
+ * @param {string} [fallback=DEFAULT_BAILEYS_LABEL]
+ * @returns {string}
+ */
 const normalizeLabel = (value, fallback = DEFAULT_BAILEYS_LABEL) => {
   const normalized = String(value || '')
     .trim()
@@ -101,6 +181,12 @@ const normalizeLabel = (value, fallback = DEFAULT_BAILEYS_LABEL) => {
   return normalized || fallback;
 };
 
+/**
+ * Normaliza nível pino para um valor aceito.
+ * @param {unknown} value
+ * @param {string} [fallback=DEFAULT_PINO_LEVEL]
+ * @returns {string}
+ */
 const normalizePinoLevel = (value, fallback = DEFAULT_PINO_LEVEL) => {
   const normalized = String(value || '')
     .trim()
@@ -108,6 +194,11 @@ const normalizePinoLevel = (value, fallback = DEFAULT_PINO_LEVEL) => {
   return PINO_LEVELS.has(normalized) ? normalized : fallback;
 };
 
+/**
+ * Converte nível estilo winston para nível pino.
+ * @param {unknown} value
+ * @returns {string}
+ */
 const mapWinstonLevelToPinoLevel = (value) => {
   const normalized = String(value || '')
     .trim()
@@ -123,6 +214,12 @@ const mapWinstonLevelToPinoLevel = (value) => {
   return DEFAULT_PINO_LEVEL;
 };
 
+/**
+ * Verifica se um método de log deve ser emitido no nível atual.
+ * @param {string} level
+ * @param {string} method
+ * @returns {boolean}
+ */
 const shouldEmitByPinoLevel = (level, method) => {
   const normalizedLevel = normalizePinoLevel(level, DEFAULT_PINO_LEVEL);
   const threshold = PINO_LEVEL_PRIORITY[normalizedLevel] ?? PINO_LEVEL_PRIORITY[DEFAULT_PINO_LEVEL];
@@ -130,11 +227,21 @@ const shouldEmitByPinoLevel = (level, method) => {
   return methodPriority >= threshold;
 };
 
+/**
+ * Resolve nome-base de serviço para metadados de logger.
+ * @returns {string}
+ */
 const resolveBaseServiceName = () => {
   const raw = String(process.env.name || process.env.ECOSYSTEM_NAME || '').trim();
   return raw || 'sistema';
 };
 
+/**
+ * Cria child logger quando suportado.
+ * @param {any} logger
+ * @param {Record<string, any>} defaultMeta
+ * @returns {any}
+ */
 const createLoggerChild = (logger, defaultMeta) => {
   if (logger && typeof logger.child === 'function') {
     return logger.child(defaultMeta);
@@ -142,6 +249,20 @@ const createLoggerChild = (logger, defaultMeta) => {
   return logger || baseLogger;
 };
 
+/**
+ * Resolve configuração do logger raiz do Baileys.
+ * @param {Record<string, any>} [overrides={}]
+ * @returns {{
+ *   mode: 'child'|'instance',
+ *   level?: string,
+ *   label: string,
+ *   service: string,
+ *   defaultMeta: Record<string, any>,
+ *   transportDefinitions?: Array<{type: string, options: Record<string, any>}>,
+ *   transports?: any[],
+ *   format?: any
+ * }}
+ */
 const resolveBaileysLoggerConfig = (overrides = {}) => {
   const mode = normalizeLoggerMode(overrides.mode ?? process.env.BAILEYS_LOGGER_MODE, DEFAULT_BAILEYS_LOGGER_MODE);
   const level = String(overrides.level ?? process.env.BAILEYS_LOGGER_LEVEL ?? '').trim() || undefined;
@@ -173,6 +294,11 @@ const resolveBaileysLoggerConfig = (overrides = {}) => {
   };
 };
 
+/**
+ * Resolve configuração do logger de socket do Baileys.
+ * @param {Record<string, any>} [overrides={}]
+ * @returns {{mode: 'silent'|'pino'|'bridge', level: string, base: Record<string, any>, options: Record<string, any>}}
+ */
 const resolveBaileysSocketLoggerConfig = (overrides = {}) => {
   const mode = normalizeSocketLoggerMode(overrides.mode ?? process.env.BAILEYS_SOCKET_LOGGER_MODE, DEFAULT_BAILEYS_SOCKET_LOGGER_MODE);
   const fallbackLevel = mode === 'silent' ? DEFAULT_PINO_SILENT_LEVEL : DEFAULT_PINO_LEVEL;
@@ -199,6 +325,11 @@ const resolveBaileysSocketLoggerConfig = (overrides = {}) => {
   };
 };
 
+/**
+ * Cria logger raiz conforme configuração resolvida.
+ * @param {Record<string, any>} [overrides={}]
+ * @returns {any}
+ */
 const createConfiguredBaileysLogger = (overrides = {}) => {
   const config = resolveBaileysLoggerConfig(overrides);
 
@@ -219,12 +350,23 @@ const createConfiguredBaileysLogger = (overrides = {}) => {
   return childLogger;
 };
 
+/**
+ * Serializa erro para metadados seguros de log.
+ * @param {any} error
+ * @returns {{errorName: string, errorMessage: string, errorStack: string|undefined}}
+ */
 const serializeError = (error) => ({
   errorName: error?.name || 'Error',
   errorMessage: error?.message || String(error),
   errorStack: error?.stack,
 });
 
+/**
+ * Resolve mensagem e metadados de uma chamada de log.
+ * @param {any} obj
+ * @param {any} msg
+ * @returns {{message: string, metadata?: Record<string, any>}}
+ */
 const resolveLogEntry = (obj, msg) => {
   const providedMessage = typeof msg === 'string' ? msg.trim() : '';
   let message = providedMessage;
@@ -259,6 +401,14 @@ const resolveLogEntry = (obj, msg) => {
   };
 };
 
+/**
+ * Escreve log no logger alvo mapeando níveis do Baileys.
+ * @param {any} targetLogger
+ * @param {string} method
+ * @param {any} obj
+ * @param {any} msg
+ * @returns {void}
+ */
 const writeBridgeLog = (targetLogger, method, obj, msg) => {
   const methodName = BAILEYS_TO_WINSTON_LEVEL[method] || 'info';
   const { message, metadata } = resolveLogEntry(obj, msg);
@@ -282,11 +432,21 @@ const writeBridgeLog = (targetLogger, method, obj, msg) => {
   }
 };
 
+/**
+ * Cria adaptador estilo pino sobre logger base (bridge).
+ * @param {any} rootLogger
+ * @param {string} level
+ * @returns {any}
+ */
 const createBaileysSocketBridgeLogger = (rootLogger, level) => {
   const sharedState = {
     level: normalizePinoLevel(level, mapWinstonLevelToPinoLevel(rootLogger?.level)),
   };
 
+  /**
+   * @param {any} targetLogger
+   * @returns {any}
+   */
   const createAdapter = (targetLogger) => ({
     get level() {
       return sharedState.level;
@@ -327,6 +487,10 @@ const createBaileysSocketBridgeLogger = (rootLogger, level) => {
 let cachedBaileysRootLogger = null;
 let cachedBaileysSocketLogger = null;
 
+/**
+ * Retorna logger raiz default com cache por processo.
+ * @returns {any}
+ */
 const getDefaultBaileysRootLogger = () => {
   if (!cachedBaileysRootLogger) {
     cachedBaileysRootLogger = createConfiguredBaileysLogger();
@@ -334,6 +498,11 @@ const getDefaultBaileysRootLogger = () => {
   return cachedBaileysRootLogger;
 };
 
+/**
+ * Cria logger de socket configurado.
+ * @param {Record<string, any>} [overrides={}]
+ * @returns {any}
+ */
 const createConfiguredBaileysSocketLogger = (overrides = {}) => {
   const config = resolveBaileysSocketLoggerConfig(overrides);
   const mergedBase = {
@@ -357,6 +526,11 @@ const createConfiguredBaileysSocketLogger = (overrides = {}) => {
   return pino(pinoOptions);
 };
 
+/**
+ * Retorna logger raiz do Baileys.
+ * @param {Record<string, any>} [overrides={}]
+ * @returns {any}
+ */
 export const createBaileysLogger = (overrides = {}) => {
   if (!overrides || Object.keys(overrides).length === 0) {
     return getDefaultBaileysRootLogger();
@@ -364,6 +538,12 @@ export const createBaileysLogger = (overrides = {}) => {
   return createConfiguredBaileysLogger(overrides);
 };
 
+/**
+ * Cria logger filho com escopo e metadados adicionais.
+ * @param {string} scope
+ * @param {Record<string, any>} [metadata={}]
+ * @returns {any}
+ */
 export const createBaileysScopedLogger = (scope, metadata = {}) => {
   const rootLogger = getDefaultBaileysRootLogger();
   const rootLabel = resolveBaileysLoggerConfig().label;
@@ -376,6 +556,11 @@ export const createBaileysScopedLogger = (scope, metadata = {}) => {
   return createLoggerChild(rootLogger, scopedMeta);
 };
 
+/**
+ * Retorna logger de socket do Baileys.
+ * @param {Record<string, any>} [overrides={}]
+ * @returns {any}
+ */
 export const createBaileysSocketLogger = (overrides = {}) => {
   if (!overrides || Object.keys(overrides).length === 0) {
     if (!cachedBaileysSocketLogger) {

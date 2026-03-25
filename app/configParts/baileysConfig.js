@@ -78,15 +78,28 @@ import { getMultiSessionRuntimeConfig } from './sessionConfig.js';
  * }} SenderInfo
  */
 
+/**
+ * Versão local de fallback do Baileys.
+ * @type {number[]}
+ */
 const DEFAULT_BAILEYS_VERSION = [7, 0, 0];
 const multiSessionRuntimeConfig = getMultiSessionRuntimeConfig();
 const PRIMARY_BAILEYS_SESSION_ID = String(multiSessionRuntimeConfig?.primarySessionId || process.env.BAILEYS_AUTH_SESSION_ID || 'default').trim() || 'default';
 
+/**
+ * Normaliza ID de sessão com fallback para sessão primária.
+ * @param {string|null|undefined} sessionId
+ * @returns {string}
+ */
 const normalizeSessionId = (sessionId) => {
   const normalized = String(sessionId || '').trim();
   return normalized || PRIMARY_BAILEYS_SESSION_ID;
 };
 
+/**
+ * Mapa de sockets ativos por sessão.
+ * @type {Map<string, BaileysSocket>}
+ */
 const sessionSocketMap = new Map();
 let activeSocket = null;
 
@@ -265,6 +278,10 @@ export const WHATSAPP_USER_JID_SERVERS = new Set(['s.whatsapp.net', 'c.us', 'hos
  */
 export const LID_USER_JID_SERVERS = new Set(['lid', 'hosted.lid']);
 
+/**
+ * Decode de JID com cache simples do último valor.
+ * @type {(jid: string) => ({user?: string, server?: string, domainType?: number, device?: number}|null)}
+ */
 const decodeJidParts = (() => {
   let lastJid = null;
   let lastDecoded = null;
@@ -341,10 +358,20 @@ export const MEDIA_TYPE_MAPPING = {
  */
 export const BINARY_MEDIA_TYPES = new Set(['image', 'video', 'videoNote', 'audio', 'voice', 'document', 'sticker']);
 
+/**
+ * Aplica normalização nativa do Baileys no payload de mensagem.
+ * @param {Record<string, any>} message
+ * @returns {Record<string, any>}
+ */
 const normalizeMessage = (message) => normalizeMessageContent(message) || message;
 
 const MESSAGE_CONTENT_WRAPPER_KEYS = ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'viewOnceMessageV2Extension', 'deviceSentMessage', 'documentWithCaptionMessage', 'botInvokeMessage', 'editedMessage', 'keepInChatMessage'];
 
+/**
+ * Resolve wrapper de mensagem de um nó com chave única.
+ * @param {Record<string, any>} node
+ * @returns {Record<string, any>|null}
+ */
 const resolveSingleWrapperMessage = (node) => {
   if (!node || typeof node !== 'object') return null;
 
@@ -359,6 +386,12 @@ const resolveSingleWrapperMessage = (node) => {
   return null;
 };
 
+/**
+ * Remove camadas de wrappers (`ephemeral`, `viewOnce`, etc.) até o payload real.
+ * @param {Record<string, any>} message
+ * @param {number} [maxDepth=8]
+ * @returns {Record<string, any>}
+ */
 const unwrapMessageContent = (message, maxDepth = 8) => {
   let current = normalizeMessage(message);
   const visited = new Set();
@@ -392,6 +425,11 @@ const unwrapMessageContent = (message, maxDepth = 8) => {
   return current || message;
 };
 
+/**
+ * Verifica se uma mediaKey está presente e não vazia.
+ * @param {unknown} mediaKey
+ * @returns {boolean}
+ */
 const hasNonEmptyMediaKey = (mediaKey) => {
   if (!mediaKey) return false;
 
@@ -417,6 +455,15 @@ const hasNonEmptyMediaKey = (mediaKey) => {
   return Boolean(mediaKey);
 };
 
+/**
+ * Constrói entrada padronizada de mídia detectada.
+ * @param {string} mediaType
+ * @param {string} messageKey
+ * @param {Record<string, any>} value
+ * @param {boolean} isQuoted
+ * @param {Partial<MediaEntry>} [overrides={}]
+ * @returns {MediaEntry}
+ */
 const buildMediaEntry = (mediaType, messageKey, value, isQuoted, overrides = {}) => ({
   mediaType,
   mediaKey: value,
@@ -434,6 +481,12 @@ const buildMediaEntry = (mediaType, messageKey, value, isQuoted, overrides = {})
   ...overrides,
 });
 
+/**
+ * Coleta mídias do corpo principal e, opcionalmente, de mensagem citada.
+ * @param {BaileysMessage|{message?: Record<string, any>}|Record<string, any>} message
+ * @param {{includeQuoted?: boolean}} [options]
+ * @returns {MediaEntry[]}
+ */
 const collectMediaFromMessage = (message, { includeQuoted = true } = {}) => {
   if (!message || !message.message) {
     return [];
@@ -452,6 +505,12 @@ const collectMediaFromMessage = (message, { includeQuoted = true } = {}) => {
   return allMedia;
 };
 
+/**
+ * Filtra lista de mídia por tipo binário e inclusão de tipos desconhecidos.
+ * @param {MediaEntry[]} media
+ * @param {{includeAllTypes?: boolean, includeUnknown?: boolean}} [options]
+ * @returns {MediaEntry[]}
+ */
 const filterMedia = (media, { includeAllTypes = false, includeUnknown = false } = {}) => {
   let filtered = media;
 
@@ -466,6 +525,11 @@ const filterMedia = (media, { includeAllTypes = false, includeUnknown = false } 
   return filtered;
 };
 
+/**
+ * Procura o campo `contextInfo.expiration` de forma recursiva no payload.
+ * @param {Record<string, any>} root
+ * @returns {number|null}
+ */
 const findExpiration = (root) => {
   if (!root || typeof root !== 'object') return null;
 
@@ -491,6 +555,11 @@ const findExpiration = (root) => {
   return null;
 };
 
+/**
+ * Resolve extensão padrão por tipo de mídia.
+ * @param {string} type
+ * @returns {string}
+ */
 const getMediaExtension = (type) => {
   if (type === 'image') return 'jpeg';
   if (type === 'video') return 'mp4';
@@ -498,6 +567,11 @@ const getMediaExtension = (type) => {
   return 'bin';
 };
 
+/**
+ * Detecta erros de decrypt inválido (OpenSSL).
+ * @param {any} error
+ * @returns {boolean}
+ */
 const isBadDecryptError = (error) => {
   if (!error || typeof error !== 'object') return false;
   if (error.code === 'ERR_OSSL_BAD_DECRYPT') return true;
@@ -1189,6 +1263,10 @@ const authReverseLidCache = new Map();
 
 let backfillPromise = null;
 
+/**
+ * Atualiza métrica de profundidade da fila `lid_map`.
+ * @returns {void}
+ */
 const updateLidQueueMetric = () => {
   setQueueDepth('lid_map', lidWriteBuffer.size);
 };
@@ -1199,20 +1277,40 @@ const updateLidQueueMetric = () => {
  */
 const now = () => __timeNowMs();
 
+/**
+ * Normaliza um identificador LID.
+ * @param {string|null|undefined} lid
+ * @returns {string|null}
+ */
 const normalizeLid = (lid) => {
   if (!lid || !isLidJid(lid)) return null;
   const normalized = normalizeJid(lid);
   return normalized || null;
 };
 
+/**
+ * Normaliza JID de usuário WhatsApp.
+ * @param {string|null|undefined} jid
+ * @returns {string|null}
+ */
 const normalizeWhatsAppJid = (jid) => {
   if (!jid || !isWhatsAppJid(jid)) return null;
   const normalized = normalizeJid(jid);
   return normalized || null;
 };
 
+/**
+ * Mantém apenas dígitos de um valor.
+ * @param {unknown} value
+ * @returns {string}
+ */
 const toDigits = (value) => String(value || '').replace(/\D+/g, '');
 
+/**
+ * Extrai telefone (dígitos) de payload reverso LID.
+ * @param {unknown} content
+ * @returns {string}
+ */
 const parseReverseMappingPhoneDigits = (content) => {
   const raw = String(content || '').trim();
   if (!raw) return '';
@@ -1228,6 +1326,11 @@ const parseReverseMappingPhoneDigits = (content) => {
   return digits.length >= 10 && digits.length <= 15 ? digits : '';
 };
 
+/**
+ * Resolve JID a partir de LID consultando auth state (MySQL/arquivos).
+ * @param {string} lid
+ * @returns {Promise<string|null>}
+ */
 const resolveAuthStoreJidByLid = async (lid) => {
   const normalizedLid = normalizeLid(lid);
   if (!normalizedLid) return null;
@@ -1519,6 +1622,11 @@ const resolveIdentityCandidates = ({ lid, jid, participantAlt } = {}) => {
   };
 };
 
+/**
+ * Monta SQL de upsert para lote do `lid_map`.
+ * @param {number} rows
+ * @returns {string}
+ */
 const buildLidUpsertSql = (rows) => {
   const placeholders = buildRowPlaceholders(rows, '(?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)');
   return `
@@ -1768,6 +1876,10 @@ export const reconcileLidToJid = async ({ lid, jid, source = 'map' } = {}) => {
   return { updated };
 };
 
+/**
+ * Executa flush em lote do buffer de atualizações LID->JID.
+ * @returns {Promise<void>}
+ */
 const flushLidQueueCore = async () => {
   if (lidWriteBuffer.size === 0) return;
   const entries = Array.from(lidWriteBuffer.values());
@@ -1861,6 +1973,10 @@ export const extractUserIdInfo = (value) => {
     };
   }
 
+  /**
+   * @param {unknown} entry
+   * @returns {string|null}
+   */
   const readJid = (entry) => (typeof entry === 'string' ? normalizeJid(entry) || null : null);
 
   const participantAlt = readJid(value.participantAlt);

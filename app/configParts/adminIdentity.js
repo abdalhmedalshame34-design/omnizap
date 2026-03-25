@@ -2,8 +2,17 @@ import { encodeJid, getJidUser, isSameJidUser, normalizeJid } from './baileysCon
 import { extractUserIdInfo, resolveUserId, resolveUserIdCached } from './baileysConfig.js';
 import { normalizePhoneDigits, resolveAdminIdentityRawFromEnv, resolveAdminPhoneFromEnv } from '../../utils/whatsapp/contactEnv.js';
 
+/**
+ * Retorna o valor bruto configurado para identidade de admin.
+ * @returns {string}
+ */
 export const getAdminRawValue = () => resolveAdminIdentityRawFromEnv();
 
+/**
+ * Resolve o JID do administrador com base no valor de ambiente.
+ * Aceita JID completo ou telefone numérico.
+ * @returns {string|null}
+ */
 export const getAdminJid = () => {
   const raw = getAdminRawValue();
   if (!raw) return null;
@@ -24,6 +33,11 @@ export const getAdminJid = () => {
   return normalizedResolved || candidate;
 };
 
+/**
+ * Resolve o telefone do administrador.
+ * Prioriza `ADMIN_PHONE` explícito e faz fallback para JID/identidade.
+ * @returns {string|null}
+ */
 export const getAdminPhone = () => {
   const explicitAdminPhone = resolveAdminPhoneFromEnv({ fallback: '' });
   if (explicitAdminPhone) return explicitAdminPhone;
@@ -38,6 +52,10 @@ export const getAdminPhone = () => {
   return digits || null;
 };
 
+/**
+ * Resolve o JID do admin consultando reconciliação LID/JID quando disponível.
+ * @returns {Promise<string|null>}
+ */
 export const resolveAdminJid = async () => {
   const cached = getAdminJid();
   if (!cached) return null;
@@ -50,6 +68,11 @@ export const resolveAdminJid = async () => {
   }
 };
 
+/**
+ * Verifica se um JID de remetente corresponde ao administrador.
+ * @param {string|null|undefined} senderJid
+ * @returns {boolean}
+ */
 export const isAdminSender = (senderJid) => {
   const adminJid = getAdminJid();
   if (!adminJid || !senderJid) return false;
@@ -60,6 +83,12 @@ export const isAdminSender = (senderJid) => {
   return isSameJidUser(normalizedSender, adminJid) || normalizedSender === adminJid;
 };
 
+/**
+ * Verifica se a identidade do remetente corresponde ao administrador.
+ * Considera candidatos `jid`, `lid`, `participantAlt` e resolução assíncrona.
+ * @param {unknown} senderIdentity
+ * @returns {Promise<boolean>}
+ */
 export const isAdminSenderAsync = async (senderIdentity) => {
   const senderInfo = extractUserIdInfo(senderIdentity);
   if (!senderInfo.raw && !senderInfo.jid && !senderInfo.lid && !senderInfo.participantAlt) return false;

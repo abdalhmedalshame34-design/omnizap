@@ -5,12 +5,42 @@ import path from 'node:path';
 import { baileysAuthLogger as logger } from '../config/index.js';
 import { TABLES, executeQuery, pool } from '../../database/index.js';
 
+/**
+ * Nome da tabela que persiste o estado de autenticação do Baileys.
+ * @type {string}
+ */
 const AUTH_TABLE = TABLES.BAILEYS_AUTH_STATE;
+/**
+ * Categoria usada para armazenar as credenciais principais.
+ * @type {string}
+ */
 const CREDS_CATEGORY = 'creds';
+/**
+ * Identificador fixo da linha de credenciais.
+ * @type {string}
+ */
 const CREDS_ITEM_ID = 'default';
+/**
+ * Extensão esperada para arquivos de bootstrap de auth state.
+ * @type {string}
+ */
 const AUTH_FILE_EXTENSION = '.json';
+/**
+ * Tipos conhecidos de signal keys persistidos no auth state.
+ * @type {string[]}
+ */
 const KNOWN_SIGNAL_KEY_TYPES = ['pre-key', 'session', 'sender-key', 'sender-key-memory', 'app-state-sync-key', 'app-state-sync-version', 'lid-mapping', 'device-list', 'tctoken'];
+/**
+ * Tipos ordenados por tamanho (desc) para priorizar match de prefixo mais específico.
+ * @type {string[]}
+ */
 const KNOWN_SIGNAL_KEY_TYPES_SORTED = [...KNOWN_SIGNAL_KEY_TYPES].sort((left, right) => right.length - left.length);
+/**
+ * Interpreta uma variável de ambiente booleana com fallback.
+ * @param {unknown} value
+ * @param {boolean} fallback
+ * @returns {boolean}
+ */
 const parseEnvBool = (value, fallback) => {
   if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -18,10 +48,22 @@ const parseEnvBool = (value, fallback) => {
   if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
   return fallback;
 };
+/**
+ * Habilita cache em memória do key store do Baileys.
+ * @type {boolean}
+ */
 const BAILEYS_AUTH_KEYS_CACHE_ENABLED = parseEnvBool(process.env.BAILEYS_AUTH_KEYS_CACHE_ENABLED, true);
 
+/**
+ * Promise compartilhada para inicialização idempotente da tabela.
+ * @type {Promise<void> | null}
+ */
 let ensureTablePromise = null;
 
+/**
+ * Helpers de serialização JSON que preservam Buffers/Uint8Array.
+ * @type {{replacer: (key: string, value: any) => any, reviver: (key: string, value: any) => any}}
+ */
 const BufferJSON = {
   replacer: (_, value) => {
     if (Buffer.isBuffer(value) || value instanceof Uint8Array || value?.type === 'Buffer') {
@@ -46,20 +88,45 @@ const BufferJSON = {
   },
 };
 
+/**
+ * Monta placeholder SQL para cláusula `IN`.
+ * @param {number} count
+ * @returns {string}
+ */
 const buildInClause = (count) => new Array(count).fill('?').join(', ');
 
+/**
+ * Normaliza o ID de sessão do auth state.
+ * @param {string | null | undefined} sessionId
+ * @returns {string}
+ */
 const normalizeSessionId = (sessionId) => {
   const normalized = String(sessionId || '').trim();
   return normalized || 'default';
 };
 
+/**
+ * Normaliza o identificador de item para armazenamento no banco.
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
 const normalizeStorageId = (value) =>
   String(value || '')
     .replace(/\//g, '__')
     .replace(/:/g, '-');
 
+/**
+ * Serializa payload para coluna JSON com suporte a Buffer.
+ * @param {any} value
+ * @returns {string}
+ */
 const toJsonPayload = (value) => JSON.stringify(value, BufferJSON.replacer);
 
+/**
+ * Faz parse de payload JSON persistido no banco.
+ * @param {unknown} rawPayload
+ * @returns {any | null}
+ */
 const parseJsonPayload = (rawPayload) => {
   if (rawPayload === null || rawPayload === undefined) return null;
   try {
@@ -73,6 +140,19 @@ const parseJsonPayload = (rawPayload) => {
   }
 };
 
+/**
+ * @typedef {{
+ *   totalRows: number,
+ *   credsRows: number,
+ *   signalKeyRows: number,
+ *   categories: Record<string, number>
+ * }} SessionAuthStateStats
+ */
+/**
+ * Lê estatísticas agregadas do auth state para a sessão.
+ * @param {string} sessionId
+ * @returns {Promise<SessionAuthStateStats>}
+ */
 const readSessionAuthStateStats = async (sessionId) => {
   const rows = await executeQuery(
     `
@@ -108,6 +188,10 @@ const readSessionAuthStateStats = async (sessionId) => {
   return stats;
 };
 
+/**
+ * Garante a existência da tabela de auth state no banco.
+ * @returns {Promise<void>}
+ */
 const ensureAuthStateTable = async () => {
   if (ensureTablePromise) {
     return ensureTablePromise;
@@ -142,6 +226,15 @@ const ensureAuthStateTable = async () => {
   return ensureTablePromise;
 };
 
+/**
+ * Insere ou atualiza uma linha de auth state.
+ * @param {string} sessionId
+ * @param {string} category
+ * @param {string} itemId
+ * @param {any} value
+ * @param {import('mysql2/promise').PoolConnection | null} [connection=null]
+ * @returns {Promise<void>}
+ */
 const upsertAuthRow = async (sessionId, category, itemId, value, connection = null) => {
   const payload = toJsonPayload(value);
   await executeQuery(
@@ -155,10 +248,23 @@ const upsertAuthRow = async (sessionId, category, itemId, value, connection = nu
   );
 };
 
+/**
+ * Remove uma linha de auth state.
+ * @param {string} sessionId
+ * @param {string} category
+ * @param {string} itemId
+ * @param {import('mysql2/promise').PoolConnection | null} [connection=null]
+ * @returns {Promise<void>}
+ */
 const deleteAuthRow = async (sessionId, category, itemId, connection = null) => {
   await executeQuery(`DELETE FROM \`${AUTH_TABLE}\` WHERE session_id = ? AND category = ? AND item_id = ?`, [sessionId, category, itemId], connection);
 };
 
+/**
+ * Lê as credenciais salvas para uma sessão.
+ * @param {string} sessionId
+ * @returns {Promise<import('@whiskeysockets/baileys').AuthenticationCreds | null>}
+ */
 const readCredsFromDb = async (sessionId) => {
   const rows = await executeQuery(`SELECT payload FROM \`${AUTH_TABLE}\` WHERE session_id = ? AND category = ? AND item_id = ? LIMIT 1`, [sessionId, CREDS_CATEGORY, CREDS_ITEM_ID]);
   const payload = rows?.[0]?.payload;
@@ -166,6 +272,14 @@ const readCredsFromDb = async (sessionId) => {
   return parsed || null;
 };
 
+/**
+ * @typedef {{category: string, itemId: string}} AuthFileMetadata
+ */
+/**
+ * Extrai categoria e itemId de um arquivo legado de auth state.
+ * @param {string} fileName
+ * @returns {AuthFileMetadata | null}
+ */
 const parseAuthFileMetadata = (fileName) => {
   if (!fileName || typeof fileName !== 'string' || !fileName.endsWith(AUTH_FILE_EXTENSION)) {
     return null;
@@ -194,6 +308,12 @@ const parseAuthFileMetadata = (fileName) => {
   return null;
 };
 
+/**
+ * Migra auth state legado de arquivos para MySQL, quando necessário.
+ * @param {string} sessionId
+ * @param {string | null} bootstrapFromDir
+ * @returns {Promise<boolean>} `true` quando houve importação de ao menos uma linha.
+ */
 const migrateSessionFromFiles = async (sessionId, bootstrapFromDir) => {
   if (!bootstrapFromDir) return false;
 
@@ -285,6 +405,14 @@ const migrateSessionFromFiles = async (sessionId, bootstrapFromDir) => {
   return importedRows > 0;
 };
 
+/**
+ * Cria implementação de SignalKeyStore persistida em MySQL.
+ * @param {string} sessionId
+ * @returns {{
+ *   get: (type: string, ids: string[]) => Promise<Record<string, any>>,
+ *   set: (data: Record<string, Record<string, any>>) => Promise<void>
+ * }}
+ */
 const createDbSignalKeyStore = (sessionId) => ({
   /**
    * @param {string} type

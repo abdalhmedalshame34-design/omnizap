@@ -4,28 +4,96 @@ import { queueMessageInsert } from '../services/infra/dbWriteQueue.js';
 import { parseEnvBool, parseEnvInt, normalizeJid, isGroupJid, isStatusJid, isBroadcastJid, isNewsletterJid, normalizeWAPresence, isLidJid, isWhatsAppJid, normalizePnToJid, resolveUserId } from './baileysConfig.js';
 import { getOwner as getGroupOwner, tryAcquire as tryAcquireGroupOwner } from '../services/multiSession/groupOwnershipService.js';
 
+/**
+ * Número máximo de tentativas de envio.
+ * @type {number}
+ */
 const BAILEYS_SEND_RETRY_ATTEMPTS = parseEnvInt(process.env.BAILEYS_SEND_RETRY_ATTEMPTS, 2, 1, 5);
+/**
+ * Atraso base (ms) para backoff exponencial entre retries.
+ * @type {number}
+ */
 const BAILEYS_SEND_RETRY_BASE_DELAY_MS = parseEnvInt(process.env.BAILEYS_SEND_RETRY_BASE_DELAY_MS, 600, 100, 10_000);
+/**
+ * Timeout de upload de mídia repassado ao Baileys.
+ * @type {number}
+ */
 const BAILEYS_SEND_MEDIA_UPLOAD_TIMEOUT_MS = parseEnvInt(process.env.BAILEYS_SEND_MEDIA_UPLOAD_TIMEOUT_MS, 0, 0, 120_000);
+/**
+ * Habilita presença automática durante replies.
+ * @type {boolean}
+ */
 const BAILEYS_REPLY_PRESENCE_ENABLED = parseEnvBool(process.env.BAILEYS_REPLY_PRESENCE_ENABLED, true);
+/**
+ * Define se deve assinar presença antes de enviar update.
+ * @type {boolean}
+ */
 const BAILEYS_REPLY_PRESENCE_SUBSCRIBE = parseEnvBool(process.env.BAILEYS_REPLY_PRESENCE_SUBSCRIBE, true);
+/**
+ * Delay entre presença "before" e envio (ms).
+ * @type {number}
+ */
 const BAILEYS_REPLY_PRESENCE_DELAY_MS = parseEnvInt(process.env.BAILEYS_REPLY_PRESENCE_DELAY_MS, 280, 0, 3_000);
+/**
+ * Presença enviada antes do envio.
+ * @type {import('@whiskeysockets/baileys').WAPresence}
+ */
 const BAILEYS_REPLY_PRESENCE_BEFORE = normalizeWAPresence(process.env.BAILEYS_REPLY_PRESENCE_BEFORE, 'composing');
+/**
+ * Presença enviada após o envio.
+ * @type {import('@whiskeysockets/baileys').WAPresence}
+ */
 const BAILEYS_REPLY_PRESENCE_AFTER = normalizeWAPresence(process.env.BAILEYS_REPLY_PRESENCE_AFTER, 'paused');
+/**
+ * Prefere enviar para PN quando o destino original for LID.
+ * @type {boolean}
+ */
 const BAILEYS_SEND_PREFER_PN_FOR_LID = parseEnvBool(process.env.BAILEYS_SEND_PREFER_PN_FOR_LID, true);
+/**
+ * TTL do cache de permissão de escrita em grupo (ms).
+ * @type {number}
+ */
 const GROUP_WRITE_PERMISSION_CACHE_TTL_MS = parseEnvInt(process.env.GROUP_OWNER_WRITE_CACHE_TTL_MS, 8_000, 1_000, 60_000);
 
+/**
+ * Verifica se o valor é um objeto plano.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 const isPlainObject = (value) => Object.prototype.toString.call(value) === '[object Object]';
 
+/**
+ * Chaves primárias conhecidas de `AnyMessageContent`.
+ * @type {Set<string>}
+ */
 const ANY_MESSAGE_CONTENT_PRIMARY_KEYS = new Set(['text', 'image', 'video', 'audio', 'sticker', 'stickerPack', 'stickerPackMessage', 'document', 'event', 'poll', 'contacts', 'location', 'react', 'buttonReply', 'groupInvite', 'listReply', 'pin', 'product', 'sharePhoneNumber', 'requestPhoneNumber', 'forward', 'delete', 'disappearingMessagesInChat', 'limitSharing']);
+/**
+ * Conteúdos que não disparam presença de resposta.
+ * @type {Set<string>}
+ */
 const PRESENCE_NON_REPLY_CONTENT_KEYS = new Set(['react', 'delete', 'pin', 'disappearingMessagesInChat']);
+/**
+ * Cache local de permissão de escrita por `sessionId+groupJid`.
+ * @type {Map<string, {allowed: boolean, ownerSessionId: string | null, expiresAtMs: number}>}
+ */
 const groupWritePermissionCache = new Map();
 
+/**
+ * Normaliza um ID de sessão.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
 const normalizeSessionId = (value) => {
   const normalized = String(value || '').trim();
   return normalized || null;
 };
 
+/**
+ * Recupera permissão de escrita de grupo no cache.
+ * @param {string} groupJid
+ * @param {string} sessionId
+ * @returns {{allowed: boolean, ownerSessionId: string | null, expiresAtMs: number} | null}
+ */
 const getCachedGroupWritePermission = (groupJid, sessionId) => {
   const key = `${sessionId}:${groupJid}`;
   const cached = groupWritePermissionCache.get(key);
@@ -37,6 +105,14 @@ const getCachedGroupWritePermission = (groupJid, sessionId) => {
   return cached;
 };
 
+/**
+ * Salva permissão de escrita de grupo no cache.
+ * @param {string} groupJid
+ * @param {string} sessionId
+ * @param {boolean} allowed
+ * @param {string|null} [ownerSessionId=null]
+ * @returns {void}
+ */
 const setCachedGroupWritePermission = (groupJid, sessionId, allowed, ownerSessionId = null) => {
   const key = `${sessionId}:${groupJid}`;
   groupWritePermissionCache.set(key, {
@@ -46,6 +122,12 @@ const setCachedGroupWritePermission = (groupJid, sessionId, allowed, ownerSessio
   });
 };
 
+/**
+ * Resolve se a sessão atual pode escrever em um grupo.
+ * @param {string} groupJid
+ * @param {string|null} sessionId
+ * @returns {Promise<{allowed: boolean, ownerSessionId: string | null, reason: string}>}
+ */
 const resolveGroupWritePermission = async (groupJid, sessionId) => {
   if (!isGroupJid(groupJid) || !sessionId) {
     return {
@@ -226,6 +308,11 @@ const shouldSendReplyPresence = (jid, content, runtimeOptions) => {
   return true;
 };
 
+/**
+ * Verifica se o JID é de usuário direto (não grupo/broadcast/status/newsletter).
+ * @param {string} jid
+ * @returns {boolean}
+ */
 const isDirectUserJid = (jid) => {
   if (!jid) return false;
   if (isGroupJid(jid)) return false;
@@ -235,6 +322,11 @@ const isDirectUserJid = (jid) => {
   return true;
 };
 
+/**
+ * Resolve JID preferencial de envio, convertendo LID para PN quando possível.
+ * @param {string} normalizedJid
+ * @returns {Promise<string>}
+ */
 const resolvePreferredSendJid = async (normalizedJid) => {
   if (!normalizedJid) return normalizedJid;
   if (!BAILEYS_SEND_PREFER_PN_FOR_LID) return normalizedJid;
@@ -262,6 +354,14 @@ const resolvePreferredSendJid = async (normalizedJid) => {
   return normalizedJid;
 };
 
+/**
+ * Envia presença no Baileys sem interromper o fluxo principal em caso de erro.
+ * @param {import('@whiskeysockets/baileys').WASocket} sock
+ * @param {import('@whiskeysockets/baileys').WAPresence} type
+ * @param {string} jid
+ * @param {boolean} [subscribeFirst=false]
+ * @returns {Promise<void>}
+ */
 const sendPresenceSilently = async (sock, type, jid, subscribeFirst = false) => {
   if (!sock || typeof sock.sendPresenceUpdate !== 'function') return;
   try {
@@ -311,8 +411,18 @@ export const buildMessageData = (msg, senderId, sessionId = null) => ({
   timestamp: new Date(resolveMessageTimestampMs(msg)),
 });
 
+/**
+ * Atrasa execução por `ms`.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 
+/**
+ * Detecta se um erro de envio é potencialmente transitório.
+ * @param {any} error
+ * @returns {boolean}
+ */
 const isTransientSendError = (error) => {
   const statusCode = Number(error?.output?.statusCode || error?.statusCode || 0);
   if ([408, 409, 425, 429, 500, 502, 503, 504].includes(statusCode)) return true;
@@ -329,6 +439,11 @@ const isTransientSendError = (error) => {
   return transientFragments.some((fragment) => rawMessage.includes(fragment));
 };
 
+/**
+ * Indica se o erro sugere refresh explícito de media connection.
+ * @param {any} error
+ * @returns {boolean}
+ */
 const shouldRefreshMediaConnection = (error) => {
   const rawMessage = `${error?.message || ''} ${error?.data?.message || ''}`.toLowerCase();
   return rawMessage.includes('media') || rawMessage.includes('directpath') || rawMessage.includes('upload');
