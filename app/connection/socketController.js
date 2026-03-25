@@ -25,11 +25,14 @@ import { getOwner as getGroupOwner, tryAcquire as tryAcquireGroupOwner, heartbea
 import sessionRegistryService from '../services/multiSession/sessionRegistryService.js';
 import { createGroupOwnerWriteStateResolver, normalizeAssignmentVersion } from './groupOwnerWriteStateResolver.js';
 import { useDbAuthState } from './baileysDbAuthState.js';
+import { applyLibsignalRuntimePatch } from './baileysLibsignalPatch.js';
 
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+applyLibsignalRuntimePatch();
 
 /**
  * Indica se o ambiente de execução é de produção.

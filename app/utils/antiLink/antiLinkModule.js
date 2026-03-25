@@ -965,41 +965,12 @@ export const handleAntiLink = async ({ sock, messageInfo, extractedText, remoteJ
       return false;
     }
 
+    let removedParticipantId = '';
     try {
-      const removedParticipantId = await removeParticipantWithFallback(sock, normalizedRemoteJid, senderContext.removalCandidates);
+      removedParticipantId = await removeParticipantWithFallback(sock, normalizedRemoteJid, senderContext.removalCandidates);
       if (!removedParticipantId) {
         throw new Error('Nenhum candidato de participante pôde ser removido.');
       }
-
-      const deletionCandidates = uniqueNormalizedJids([removedParticipantId, ...senderContext.senderCandidates]);
-      const purgeResult = await purgeRecentMessagesFromRemovedSender({
-        sock,
-        messageInfo,
-        remoteJid: normalizedRemoteJid,
-        senderCandidates: deletionCandidates,
-      });
-
-      const senderMention = senderContext.mentionJid || removedParticipantId || senderContext.primarySenderId;
-      const senderUser = getJidUser(senderMention);
-      const recentDeleteLine = purgeResult.deleted > 0 ? `\n🧹 ${purgeResult.deleted} mensagem(ns) dos últimos ${ANTILINK_DELETE_WINDOW_MINUTES} minuto(s) foram apagadas.` : '';
-      await sendMessageWithFallback(sock, normalizedRemoteJid, {
-        text: `🚫 @${senderUser || 'usuario'} foi removido por enviar um link.${recentDeleteLine}`,
-        mentions: senderMention ? [senderMention] : [],
-      });
-
-      logger.info(`Usuário ${removedParticipantId || senderContext.primarySenderId} removido do grupo ${normalizedRemoteJid} por enviar link.`, {
-        action: 'antilink_remove',
-        groupId: normalizedRemoteJid,
-        userId: removedParticipantId || senderContext.primarySenderId,
-        senderCandidates: senderContext.senderCandidates,
-        deletedRecentMessages: purgeResult.deleted,
-        failedRecentMessageDeletes: purgeResult.failed,
-        requestedRecentMessageDeletes: purgeResult.requested,
-        deleteRevalidationRounds: purgeResult.rounds,
-        deleteRevalidationRoundsWithDeletes: purgeResult.roundsWithDeletes,
-      });
-
-      return true;
     } catch (error) {
       logger.error(`Falha ao remover usuário com antilink: ${error.message}`, {
         action: 'antilink_error',
@@ -1008,7 +979,66 @@ export const handleAntiLink = async ({ sock, messageInfo, extractedText, remoteJ
         senderCandidates: senderContext.senderCandidates,
         error: error.stack,
       });
+      return false;
     }
+
+    const deletionCandidates = uniqueNormalizedJids([removedParticipantId, ...senderContext.senderCandidates]);
+    let purgeResult = {
+      requested: 0,
+      deleted: 0,
+      failed: 0,
+      rounds: 0,
+      roundsWithDeletes: 0,
+    };
+    try {
+      purgeResult = await purgeRecentMessagesFromRemovedSender({
+        sock,
+        messageInfo,
+        remoteJid: normalizedRemoteJid,
+        senderCandidates: deletionCandidates,
+      });
+    } catch (error) {
+      logger.warn('Falha ao limpar mensagens recentes após remoção por antilink.', {
+        action: 'antilink_recent_delete_error',
+        groupId: normalizedRemoteJid,
+        userId: removedParticipantId || senderContext.primarySenderId,
+        senderCandidates: senderContext.senderCandidates,
+        error: error?.message,
+      });
+    }
+
+    const senderMention = senderContext.mentionJid || removedParticipantId || senderContext.primarySenderId;
+    const senderUser = getJidUser(senderMention);
+    const recentDeleteLine = purgeResult.deleted > 0 ? `\n🧹 ${purgeResult.deleted} mensagem(ns) dos últimos ${ANTILINK_DELETE_WINDOW_MINUTES} minuto(s) foram apagadas.` : '';
+
+    try {
+      await sendMessageWithFallback(sock, normalizedRemoteJid, {
+        text: `🚫 @${senderUser || 'usuario'} foi removido por enviar um link.${recentDeleteLine}`,
+        mentions: senderMention ? [senderMention] : [],
+      });
+    } catch (error) {
+      logger.warn('Falha ao enviar aviso de remoção por antilink.', {
+        action: 'antilink_remove_notice_error',
+        groupId: normalizedRemoteJid,
+        userId: removedParticipantId || senderContext.primarySenderId,
+        senderCandidates: senderContext.senderCandidates,
+        error: error?.message,
+      });
+    }
+
+    logger.info(`Usuário ${removedParticipantId || senderContext.primarySenderId} removido do grupo ${normalizedRemoteJid} por enviar link.`, {
+      action: 'antilink_remove',
+      groupId: normalizedRemoteJid,
+      userId: removedParticipantId || senderContext.primarySenderId,
+      senderCandidates: senderContext.senderCandidates,
+      deletedRecentMessages: purgeResult.deleted,
+      failedRecentMessageDeletes: purgeResult.failed,
+      requestedRecentMessageDeletes: purgeResult.requested,
+      deleteRevalidationRounds: purgeResult.rounds,
+      deleteRevalidationRoundsWithDeletes: purgeResult.roundsWithDeletes,
+    });
+
+    return true;
   } else if (isAdmin && !senderIsBot) {
     try {
       const senderMention = senderContext.mentionJid || senderContext.primarySenderId;

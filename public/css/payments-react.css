@@ -30,10 +30,7 @@ body.payments-body {
 
 body.payments-body-main {
   color: var(--payments-main-text);
-  background:
-    radial-gradient(52rem 30rem at -4% -8%, rgba(30, 143, 255, 0.18), transparent 62%),
-    radial-gradient(44rem 24rem at 104% 2%, rgba(53, 255, 181, 0.14), transparent 58%),
-    linear-gradient(160deg, var(--payments-main-bg-start), var(--payments-main-bg-end));
+  background: radial-gradient(52rem 30rem at -4% -8%, rgba(30, 143, 255, 0.18), transparent 62%), radial-gradient(44rem 24rem at 104% 2%, rgba(53, 255, 181, 0.14), transparent 58%), linear-gradient(160deg, var(--payments-main-bg-start), var(--payments-main-bg-end));
 }
 
 body.payments-body-main::before {
@@ -41,9 +38,7 @@ body.payments-body-main::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(rgba(173, 216, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(173, 216, 255, 0.05) 1px, transparent 1px);
+  background: linear-gradient(rgba(173, 216, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(173, 216, 255, 0.05) 1px, transparent 1px);
   background-size: 34px 34px;
   mask-image: radial-gradient(circle at center, black 38%, transparent 100%);
   opacity: 0.25;
@@ -299,18 +294,12 @@ body.payments-body-main::before {
 
 body.payments-body-success {
   color: var(--payments-success-text);
-  background:
-    radial-gradient(50rem 22rem at 10% -15%, rgba(74, 222, 128, 0.22), transparent 62%),
-    radial-gradient(42rem 20rem at 100% 110%, rgba(59, 130, 246, 0.2), transparent 62%),
-    linear-gradient(170deg, #051714, #081320);
+  background: radial-gradient(50rem 22rem at 10% -15%, rgba(74, 222, 128, 0.22), transparent 62%), radial-gradient(42rem 20rem at 100% 110%, rgba(59, 130, 246, 0.2), transparent 62%), linear-gradient(170deg, #051714, #081320);
 }
 
 body.payments-body-cancel {
   color: var(--payments-cancel-text);
-  background:
-    radial-gradient(36rem 18rem at 12% -8%, rgba(251, 113, 133, 0.3), transparent 62%),
-    radial-gradient(36rem 18rem at 100% 100%, rgba(239, 68, 68, 0.26), transparent 62%),
-    linear-gradient(160deg, #2b1218, #1e0b10);
+  background: radial-gradient(36rem 18rem at 12% -8%, rgba(251, 113, 133, 0.3), transparent 62%), radial-gradient(36rem 18rem at 100% 100%, rgba(239, 68, 68, 0.26), transparent 62%), linear-gradient(160deg, #2b1218, #1e0b10);
 }
 
 #payments-success-react-root,

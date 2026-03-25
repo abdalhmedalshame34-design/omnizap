@@ -27,13 +27,9 @@ const resolveConfig = (rootElement) => {
 const PaymentsCancelReactApp = ({ config }) => html`
   <main className="payments-cancel-card">
     <h1 className="payments-cancel-title">Pagamento cancelado</h1>
-    <p className="payments-cancel-subtitle">
-      Nenhuma cobranca foi finalizada. Se quiser, voce pode tentar novamente agora.
-    </p>
+    <p className="payments-cancel-subtitle">Nenhuma cobranca foi finalizada. Se quiser, voce pode tentar novamente agora.</p>
 
-    <div className="payments-cancel-note">
-      Quando o checkout for concluido, o webhook do Stripe libera seu Premium automaticamente.
-    </div>
+    <div className="payments-cancel-note">Quando o checkout for concluido, o webhook do Stripe libera seu Premium automaticamente.</div>
 
     <div className="payments-cancel-actions">
       <a className="payments-cancel-button retry" href=${config.paymentsPath}>Tentar novamente</a>

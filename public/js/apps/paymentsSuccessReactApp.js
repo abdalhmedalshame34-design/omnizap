@@ -25,9 +25,7 @@ const resolveConfig = (rootElement) => {
   const dataset = rootElement?.dataset || {};
 
   return {
-    paymentsApiBasePath:
-      String(dataset.paymentsApiBasePath || DEFAULT_PAYMENTS_API_BASE_PATH).trim() ||
-      DEFAULT_PAYMENTS_API_BASE_PATH,
+    paymentsApiBasePath: String(dataset.paymentsApiBasePath || DEFAULT_PAYMENTS_API_BASE_PATH).trim() || DEFAULT_PAYMENTS_API_BASE_PATH,
     panelPath: normalizeRoutePath(dataset.panelPath, DEFAULT_PANEL_PATH),
     paymentsPath: normalizeRoutePath(dataset.paymentsPath, DEFAULT_PAYMENTS_PATH),
   };
@@ -58,10 +56,7 @@ const PaymentsSuccessReactApp = ({ config }) => {
     };
 
     if (!sessionId) {
-      setStatus(
-        'Pagamento concluido. Se o Premium ainda nao apareceu, aguarde alguns segundos e atualize o painel.',
-        'pending',
-      );
+      setStatus('Pagamento concluido. Se o Premium ainda nao apareceu, aguarde alguns segundos e atualize o painel.', 'pending');
       setMeta('Dica: volte ao painel e confirme se o plano Premium ja foi liberado.');
       return () => {
         active = false;
@@ -95,19 +90,9 @@ const PaymentsSuccessReactApp = ({ config }) => {
 
         if (action === 'premium_activated') {
           setStatus('Pagamento confirmado e Premium ativado com sucesso.');
-        } else if (
-          status === 'complete' &&
-          (paymentStatus === 'paid' || paymentStatus === 'no_payment_required') &&
-          reason === 'owner_jid_missing'
-        ) {
-          setStatus(
-            'Pagamento confirmado, mas faltou o WhatsApp para liberar Premium. Fale com o suporte.',
-            'error',
-          );
-        } else if (
-          status === 'complete' &&
-          (paymentStatus === 'paid' || paymentStatus === 'no_payment_required')
-        ) {
+        } else if (status === 'complete' && (paymentStatus === 'paid' || paymentStatus === 'no_payment_required') && reason === 'owner_jid_missing') {
+          setStatus('Pagamento confirmado, mas faltou o WhatsApp para liberar Premium. Fale com o suporte.', 'error');
+        } else if (status === 'complete' && (paymentStatus === 'paid' || paymentStatus === 'no_payment_required')) {
           setStatus('Pagamento confirmado. Estamos finalizando a liberacao do Premium.', 'pending');
         } else {
           setStatus('Sessao concluida, aguardando confirmacao final de pagamento no Stripe.', 'pending');

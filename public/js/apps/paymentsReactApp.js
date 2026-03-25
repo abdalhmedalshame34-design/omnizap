@@ -111,12 +111,8 @@ const resolveConfig = (rootElement) => {
 
   return {
     loginPath: String(dataset.loginPath || DEFAULT_LOGIN_PATH).trim() || DEFAULT_LOGIN_PATH,
-    homeBootstrapPath:
-      String(dataset.homeBootstrapPath || DEFAULT_HOME_BOOTSTRAP_ENDPOINT).trim() ||
-      DEFAULT_HOME_BOOTSTRAP_ENDPOINT,
-    paymentsApiBasePath:
-      String(dataset.paymentsApiBasePath || DEFAULT_PAYMENTS_API_BASE_PATH).trim() ||
-      DEFAULT_PAYMENTS_API_BASE_PATH,
+    homeBootstrapPath: String(dataset.homeBootstrapPath || DEFAULT_HOME_BOOTSTRAP_ENDPOINT).trim() || DEFAULT_HOME_BOOTSTRAP_ENDPOINT,
+    paymentsApiBasePath: String(dataset.paymentsApiBasePath || DEFAULT_PAYMENTS_API_BASE_PATH).trim() || DEFAULT_PAYMENTS_API_BASE_PATH,
   };
 };
 
@@ -270,10 +266,13 @@ const PaymentsReactApp = ({ config }) => {
     };
   }, [loadAuthenticatedUser, loadPublicConfig, setStatus]);
 
-  const onInputChange = useCallback((field) => (event) => {
-    const value = String(event?.target?.value || '');
-    setFormValues((previous) => ({ ...previous, [field]: value }));
-  }, []);
+  const onInputChange = useCallback(
+    (field) => (event) => {
+      const value = String(event?.target?.value || '');
+      setFormValues((previous) => ({ ...previous, [field]: value }));
+    },
+    [],
+  );
 
   const onSubmit = useCallback(
     async (event) => {
@@ -321,10 +320,7 @@ const PaymentsReactApp = ({ config }) => {
     [config.paymentsApiBasePath, formValues.email, formValues.name, formValues.whatsapp, setStatus],
   );
 
-  const submitDisabled = useMemo(
-    () => loadingCheckout || !authenticated || !paymentsEnabled,
-    [authenticated, loadingCheckout, paymentsEnabled],
-  );
+  const submitDisabled = useMemo(() => loadingCheckout || !authenticated || !paymentsEnabled, [authenticated, loadingCheckout, paymentsEnabled]);
 
   const statusClassName = useMemo(() => {
     const list = ['payments-status'];
@@ -337,70 +333,25 @@ const PaymentsReactApp = ({ config }) => {
       <section className="payments-hero">
         <span className="payments-eyebrow">Pagamento Automatico Stripe</span>
         <h1>Ative o Premium em minutos</h1>
-        <p>
-          Preencha seu WhatsApp e siga para o checkout seguro. Assim que o
-          pagamento confirmar no webhook, seu acesso Premium e liberado
-          automaticamente.
-        </p>
+        <p>Preencha seu WhatsApp e siga para o checkout seguro. Assim que o pagamento confirmar no webhook, seu acesso Premium e liberado automaticamente.</p>
       </section>
 
       <section className="payments-layout">
         <article className="payments-card payments-checkout">
-          <form onSubmit=${onSubmit} noValidate=${true}>
+          <form onSubmit=${onSubmit} novalidate=${true}>
             <div className="payments-row">
               <label htmlFor="checkout-name">Nome</label>
-              <input
-                id="checkout-name"
-                name="name"
-                type="text"
-                maxLength="120"
-                autoComplete="name"
-                placeholder="Seu nome"
-                value=${formValues.name}
-                onChange=${onInputChange('name')}
-                readOnly=${lockedFields.name}
-                title=${lockedFields.name
-                  ? 'Campo preenchido automaticamente pela sua sessao.'
-                  : undefined}
-              />
+              <input id="checkout-name" name="name" type="text" maxlength="120" autocomplete="name" placeholder="Seu nome" value=${formValues.name} onChange=${onInputChange('name')} readonly=${lockedFields.name} title=${lockedFields.name ? 'Campo preenchido automaticamente pela sua sessao.' : undefined} />
             </div>
 
             <div className="payments-row">
               <label htmlFor="checkout-email">E-mail</label>
-              <input
-                id="checkout-email"
-                name="email"
-                type="email"
-                maxLength="255"
-                autoComplete="email"
-                placeholder="voce@empresa.com"
-                value=${formValues.email}
-                onChange=${onInputChange('email')}
-                readOnly=${lockedFields.email}
-                title=${lockedFields.email
-                  ? 'Campo preenchido automaticamente pela sua sessao.'
-                  : undefined}
-              />
+              <input id="checkout-email" name="email" type="email" maxlength="255" autocomplete="email" placeholder="voce@empresa.com" value=${formValues.email} onChange=${onInputChange('email')} readonly=${lockedFields.email} title=${lockedFields.email ? 'Campo preenchido automaticamente pela sua sessao.' : undefined} />
             </div>
 
             <div className="payments-row">
-              <label htmlFor="checkout-whatsapp"
-                >WhatsApp para liberar Premium</label
-              >
-              <input
-                id="checkout-whatsapp"
-                name="whatsapp"
-                type="text"
-                required=${true}
-                autoComplete="tel"
-                placeholder="5511999999999"
-                value=${formValues.whatsapp}
-                onChange=${onInputChange('whatsapp')}
-                readOnly=${lockedFields.whatsapp}
-                title=${lockedFields.whatsapp
-                  ? 'Campo preenchido automaticamente pela sua sessao.'
-                  : undefined}
-              />
+              <label htmlFor="checkout-whatsapp">WhatsApp para liberar Premium</label>
+              <input id="checkout-whatsapp" name="whatsapp" type="text" required=${true} autocomplete="tel" placeholder="5511999999999" value=${formValues.whatsapp} onChange=${onInputChange('whatsapp')} readonly=${lockedFields.whatsapp} title=${lockedFields.whatsapp ? 'Campo preenchido automaticamente pela sua sessao.' : undefined} />
               <p className="payments-hint">
                 Use com DDI e DDD. Exemplo:
                 <code>5511999999999</code>
@@ -410,16 +361,8 @@ const PaymentsReactApp = ({ config }) => {
             </div>
 
             <div className="payments-actions">
-              <button
-                className="payments-button payments-button-primary"
-                type="submit"
-                disabled=${submitDisabled}
-              >
-                ${loadingCheckout ? 'Criando checkout...' : 'Ir para checkout'}
-              </button>
-              <a className="payments-button payments-button-secondary" href="/"
-                >Voltar para home</a
-              >
+              <button className="payments-button payments-button-primary" type="submit" disabled=${submitDisabled}>${loadingCheckout ? 'Criando checkout...' : 'Ir para checkout'}</button>
+              <a className="payments-button payments-button-secondary" href="/">Voltar para home</a>
             </div>
 
             <p className=${statusClassName} aria-live="polite">${statusMessage}</p>
@@ -432,15 +375,9 @@ const PaymentsReactApp = ({ config }) => {
           <p className="payments-plan-price">${planPriceLabel}</p>
 
           <ul className="payments-feature-list">
-            <li>
-              Ativacao automatica apos pagamento confirmado no Stripe.
-            </li>
-            <li>
-              Fluxo seguro com assinatura de webhook validada no backend.
-            </li>
-            <li>
-              Checkout hospedado no Stripe para reduzir risco e fraude.
-            </li>
+            <li>Ativacao automatica apos pagamento confirmado no Stripe.</li>
+            <li>Fluxo seguro com assinatura de webhook validada no backend.</li>
+            <li>Checkout hospedado no Stripe para reduzir risco e fraude.</li>
           </ul>
 
           <p className="payments-small">
